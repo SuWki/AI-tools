@@ -1,0 +1,21 @@
+server:
+  port: 8080
+  encoding:
+    charset: UTF-8
+
+spring:
+  datasource:
+    url: jdbc:sqlite:data/workhub.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+      connection-timeout: 10000
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+logging:
+  level:
+    root: INFO
+    com.aiworkhub: INFO
