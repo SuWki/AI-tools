@@ -49,11 +49,11 @@ export const demoUsers: DemoUser[] = [
   },
   {
     id: 'U-REVIEWER-C', email: 'reviewer@compressor.demo', displayName: 'Compressor Reviewer', locale: 'zh',
-    password: 'demo1234', memberships: { 't-compressor': 'REVIEWER' }
+    password: 'demo1234', memberships: { 't-compressor': 'REVIEWER', 't-lubricant': 'REVIEWER', 't-alpaca': 'REVIEWER' }
   },
   {
     id: 'U-MANAGER-C', email: 'manager@compressor.demo', displayName: 'Compressor Manager', locale: 'zh',
-    password: 'demo1234', memberships: { 't-compressor': 'MANAGER' }
+    password: 'demo1234', memberships: { 't-compressor': 'MANAGER', 't-lubricant': 'MANAGER', 't-alpaca': 'MANAGER' }
   },
   {
     id: 'U-SALES-L', email: 'sales@lubricant.demo', displayName: 'Lubricant Sales', locale: 'zh',
@@ -66,9 +66,9 @@ export const demoUsers: DemoUser[] = [
 ];
 
 export const demoTenants: DemoTenantBase[] = [
-  { id: 't-compressor', nameZh: '空压机设备公司', nameEn: 'Air Compressor Co.', businessType: 'compressor' },
-  { id: 't-lubricant', nameZh: '润滑油贸易公司', nameEn: 'Lubricants Trading Co.', businessType: 'lubricant' },
-  { id: 't-alpaca', nameZh: '羊驼工艺品公司', nameEn: 'Alpaca Crafts Co.', businessType: 'alpaca' }
+  { id: 't-compressor', nameZh: 'Kotech', nameEn: 'Kotech', businessType: 'compressor' },
+  { id: 't-lubricant', nameZh: '上海安特瑞商贸有限公司', nameEn: '上海安特瑞商贸有限公司', businessType: 'lubricant' },
+  { id: 't-alpaca', nameZh: 'Warmpaca', nameEn: 'Warmpaca', businessType: 'alpaca' }
 ];
 
 function product(id: string, sku: string, name: string, nameEn: string, summary: string,

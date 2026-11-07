@@ -1,6 +1,7 @@
 import type { Lang } from './types';
 
 const zh = {
+  procurement:'采购询价',
   brandSub: '企业 AI 提效工作台',
   navTag: '工作空间',
   dashboard: '工作台',
@@ -177,7 +178,7 @@ const zh = {
   about: '关于这个版本',
   aboutDesc: '支持登录、企业隔离、双语、工单处理、知识录入、模板与复盘。无真实 AI。',
   loginTitle: '登录企业工作空间',
-  loginSub: '使用企业账号进入 AI WorkHub V2。不同企业数据在服务端按租户隔离。',
+  loginSub: '使用企业账号进入 AI WorkHub V3。不同企业数据在服务端按租户隔离。',
   email: '邮箱',
   password: '密码',
   signIn: '登录',
@@ -203,6 +204,7 @@ const zh = {
 export type I18nKey = keyof typeof zh;
 
 const en: Record<I18nKey, string> = {
+  procurement:'Procurement',
   brandSub: 'Business Productivity Workspace',
   navTag: 'WORKSPACE',
   dashboard: 'Dashboard',
@@ -379,7 +381,7 @@ const en: Record<I18nKey, string> = {
   about: 'About this version',
   aboutDesc: 'Login, tenant isolation, bilingual UI, cases, product references, templates and reviews. No live AI.',
   loginTitle: 'Sign in to your workspace',
-  loginSub: 'Use your company account to enter AI WorkHub V2. Tenant data is isolated on the server.',
+  loginSub: 'Use your company account to enter AI WorkHub V3. Tenant data is isolated on the server.',
   email: 'Email',
   password: 'Password',
   signIn: 'Sign in',
@@ -422,7 +424,7 @@ export function localized(lang: Lang, row: Record<string, unknown>, key: string)
       return enValue;
     }
   }
-  const value = row[key];
+  const value = row[key] ?? row[`${key}Zh`];
   return typeof value === 'string' ? value : '';
 }
 

@@ -90,7 +90,7 @@ public class AuthService {
         return result;
     }
 
-    public Map<String, Object> switchTenant(SessionContext ctx, String tenantId) {
+    public Map<String, Object> switchTenant(SessionContext ctx, String tenantId, String token) {
         List<Map<String, Object>> membership = jdbc.query(
                 "SELECT m.role FROM memberships m WHERE m.user_id=? AND m.tenant_id=?",
                 (rs, i) -> {
@@ -102,10 +102,14 @@ public class AuthService {
             throw ApiException.forbidden("You do not have access to this workspace");
         }
         // A user session is scoped to one active workspace; switching updates the caller's sessions.
-        jdbc.update("UPDATE sessions SET tenant_id=? WHERE user_id=?", tenantId, ctx.getUserId());
+        jdbc.update("UPDATE sessions SET tenant_id=? WHERE token=? AND user_id=?", tenantId, token, ctx.getUserId());
         String role = String.valueOf(membership.get(0).get("role"));
         SessionContext next = new SessionContext(ctx.getUserId(), tenantId, role, ctx.getEmail(), ctx.getDisplayName(), ctx.getLocale());
         return me(next);
+    }
+
+    public void logout(String token) {
+        jdbc.update("DELETE FROM sessions WHERE token=?", token);
     }
 
     public void updateLocale(SessionContext ctx, String locale) {
@@ -125,7 +129,7 @@ public class AuthService {
                 "SELECT s.user_id, s.tenant_id, u.email, u.display_name, u.locale, m.role " +
                         "FROM sessions s JOIN users u ON u.id=s.user_id " +
                         "JOIN memberships m ON m.user_id=s.user_id AND m.tenant_id=s.tenant_id " +
-                        "WHERE s.token=?",
+                        "WHERE s.token=? AND s.created_at>?",
                 (rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<String, Object>();
                     m.put("userId", rs.getString("user_id"));
@@ -135,11 +139,15 @@ public class AuthService {
                     m.put("locale", rs.getString("locale"));
                     m.put("role", rs.getString("role"));
                     return m;
-                }, token);
+                }, token, System.currentTimeMillis() - 12 * 3600_000L);
         if (rows.isEmpty()) {
             throw ApiException.unauthorized("Session expired or invalid");
         }
         Map<String, Object> row = rows.get(0);
+        String expectedTenant = request.getHeader("X-Workspace-Id");
+        if (expectedTenant != null && !expectedTenant.equals(String.valueOf(row.get("tenantId")))) {
+            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT, "WORKSPACE_CHANGED");
+        }
         return new SessionContext(
                 String.valueOf(row.get("userId")), String.valueOf(row.get("tenantId")),
                 String.valueOf(row.get("role")), String.valueOf(row.get("email")),

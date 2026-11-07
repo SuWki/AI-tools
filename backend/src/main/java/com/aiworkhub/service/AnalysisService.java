@@ -60,10 +60,12 @@ public class AnalysisService {
     }
 
     public List<Map<String, Object>> reviews(SessionContext ctx) {
+        String scope=ctx.isAdmin()?"":" AND r.created_by=?";
+        Object[] scopeArgs=ctx.isAdmin()?new Object[]{ctx.getTenantId()}:new Object[]{ctx.getTenantId(),ctx.getUserId()};
         return jdbc.query(
                 "SELECT r.id, r.case_id, r.conversation, r.result, r.created_at, u.display_name " +
                         "FROM reviews r LEFT JOIN users u ON u.id=r.created_by " +
-                        "WHERE r.tenant_id=? ORDER BY r.created_at DESC",
+                        "WHERE r.tenant_id=?"+scope+" ORDER BY r.created_at DESC",
                 (rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<String, Object>();
                     m.put("id", rs.getString("id"));
@@ -73,7 +75,7 @@ public class AnalysisService {
                     m.put("authorName", rs.getString("display_name"));
                     m.put("createdAt", rs.getLong("created_at"));
                     return m;
-                }, ctx.getTenantId());
+                }, scopeArgs);
     }
 
     @Transactional

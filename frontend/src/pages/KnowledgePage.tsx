@@ -3,6 +3,8 @@ import { api, ApiError } from '../api';
 import { t, localized } from '../i18n';
 import type { KnowledgeItem, Lang } from '../types';
 import { Empty, PageHead } from '../ui';
+import KnowledgeVersions from '../workflow/KnowledgeVersions';
+import { errorMessage } from '../workflow/labels';
 
 interface Props {
   lang: Lang;
@@ -26,7 +28,7 @@ export default function KnowledgePage({ lang, tenantId, role, toast, onUnauthori
       onUnauthorized();
       return;
     }
-    toast(error instanceof Error ? error.message : t(lang, 'loadFailed'));
+    toast(errorMessage(lang,error));
   };
 
   const load = () => api.knowledge().then(setItems).catch(fail);
@@ -146,14 +148,17 @@ export default function KnowledgePage({ lang, tenantId, role, toast, onUnauthori
               <h3>{name}</h3>
               <p>{summary}</p>
               <div className="smallprint">{t(lang, 'source')}: {item.source || '—'}</div>
+              <div className="smallprint">V{item.version} · {item.reviewerName||'—'} · {new Date(item.updatedAt).toLocaleString(lang==='zh'?'zh-CN':'en-US')}</div>
               <div className="verified flex between">
                 <span className={`pill ${item.verified ? '' : 'warn'}`}>
                   {t(lang, item.verified ? 'verified' : 'unverified')}
                 </span>
-                {!item.verified && canReview && (
+                {!item.verified && item.reviewStatus !== 'retired' && canReview && (
                   <button className="btn sm soft" onClick={() => approve(item.id)}>{t(lang, 'approve')}</button>
                 )}
               </div>
+              {item.reviewStatus==='retired'&&<span className="pill warn">{lang==='zh'?'已撤回':'Withdrawn'}</span>}
+              <KnowledgeVersions item={item} lang={lang} canReview={canReview} reload={load}/>
             </div>
           );
         })}

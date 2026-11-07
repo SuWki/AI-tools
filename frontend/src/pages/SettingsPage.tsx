@@ -3,6 +3,9 @@ import { api, ApiError, DEMO_MODE } from '../api';
 import { t, tenantName, I18nKey } from '../i18n';
 import type { Lang, Me, SettingsData } from '../types';
 import { Metric, PageHead } from '../ui';
+import { request } from '../realApi';
+import { profileOf } from '../workflow/client';
+import { errorMessage } from '../workflow/labels';
 
 interface Props {
   lang: Lang;
@@ -15,13 +18,15 @@ interface Props {
 
 export default function SettingsPage({ lang, me, tenantId, toast, onUnauthorized, onLogout }: Props) {
   const [data, setData] = useState<SettingsData | null>(null);
+  const [auditRows,setAuditRows]=useState<Array<{id:string;action:string;entityId:string;actorName:string;createdAt:number}>>([]);
+  const [auditOpen,setAuditOpen]=useState(false);
 
   const fail = (error: unknown) => {
     if (error instanceof ApiError && error.status === 401) {
       onUnauthorized();
       return;
     }
-    toast(error instanceof Error ? error.message : t(lang, 'loadFailed'));
+    toast(errorMessage(lang,error));
   };
 
   useEffect(() => {
@@ -87,8 +92,8 @@ export default function SettingsPage({ lang, me, tenantId, toast, onUnauthorized
             {data && <span className="pill slate">{t(lang, 'role')}: {data.role}</span>}
           </div>
           <div className="flex role-note">
-            <button className="btn soft" onClick={exportJson}>↧ {t(lang, 'export')}</button>
-            <button className="btn danger" onClick={reset}>↺ {t(lang, 'reset')}</button>
+            <button className="btn soft" disabled={me.role!=='ADMIN'} onClick={()=>{if(window.confirm(lang==='zh'?`导出 ${tenantName(lang,me.activeTenant)} 的工单原文、知识、复盘及工作流记录？`:`Export case messages, knowledge, reviews and workflows from ${tenantName(lang,me.activeTenant)}?`))exportJson();}}>↧ {t(lang, 'export')}</button>
+            {me.role==='ADMIN'&&<button className="btn danger" onClick={reset}>↺ {t(lang, 'reset')}</button>}
             <button className="btn" onClick={onLogout}>{t(lang, 'logout')}</button>
           </div>
         </div>
@@ -108,6 +113,8 @@ export default function SettingsPage({ lang, me, tenantId, toast, onUnauthorized
           <p className="smallprint">{t(lang, 'timeWarning')}</p>
         </div>
       </div>
+      <section className="panel" style={{marginTop:20}}><h2>{lang==='zh'?'企业场景与规则':'Business scenarios & rules'}</h2><p>{profileOf(tenantId)[lang==='zh'?'noticeZh':'noticeEn']}</p>{profileOf(tenantId).scenarios.map(s=><details key={s.id} className="task-row"><summary>{s[lang]}</summary>{s.fields.map(f=><p key={f.key}>• {f[lang]}</p>)}</details>)}<p className="smallprint">{lang==='zh'?'当前规则随版本发布；字段与授权配置的在线管理尚未开放。':'Rules are released with this version. Online field and authorisation management is not yet available.'}</p></section>
+      {!DEMO_MODE&&['ADMIN','MANAGER'].includes(me.role)&&<section className="panel" style={{marginTop:20}}><button className="btn" onClick={async()=>{try{setAuditRows(await request('/audit?limit=100'));setAuditOpen(true);}catch(e){fail(e);}}}>{lang==='zh'?'查看企业审计日志':'View workspace audit log'}</button>{auditOpen&&auditRows.map(row=><div key={row.id} className="task-row"><strong>{row.action} · {row.entityId}</strong><small>{row.actorName} · {new Date(row.createdAt).toLocaleString(lang==='zh'?'zh-CN':'en-US')}</small></div>)}</section>}
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="sectionhead"><h2>{t(lang, 'legal')}</h2></div>
         <p className="infochip">{t(lang, 'legalDesc')}</p>

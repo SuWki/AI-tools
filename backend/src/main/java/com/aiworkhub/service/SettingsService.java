@@ -43,6 +43,7 @@ public class SettingsService {
     }
 
     public Map<String, Object> export(SessionContext ctx) {
+        if(!ctx.isAdmin()) throw ApiException.forbidden("EXPORT_FORBIDDEN");
         Map<String, Object> data = new LinkedHashMap<String, Object>();
         List<Map<String, Object>> caseList = cases.list(ctx, null);
         for (Map<String, Object> c : caseList) {
@@ -52,6 +53,8 @@ public class SettingsService {
         data.put("products", knowledge.list(ctx, null));
         data.put("reviews", analysis.reviews(ctx));
         data.put("requirements", cases.requirements(ctx));
+        data.put("workflows",jdbc.queryForList("SELECT case_id, revision, content FROM case_workflows WHERE tenant_id=?",ctx.getTenantId()));
+        audit.log(ctx,"data_exported","tenant",ctx.getTenantId(),"JSON");
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("exportedAt", Instant.now().toString());
         result.put("note", "AI WorkHub V2 MVP local export");

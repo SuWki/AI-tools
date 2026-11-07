@@ -8,12 +8,14 @@ import KnowledgePage from './pages/KnowledgePage';
 import ToolsPage from './pages/ToolsPage';
 import AnalysisPage from './pages/AnalysisPage';
 import SettingsPage from './pages/SettingsPage';
+import { setWorkspaceId } from './realApi';
+import ProcurementPage from './pages/ProcurementPage';
 
 const LANG_KEY = 'workhub.lang';
 
-const navPages: Page[] = ['dashboard', 'cases', 'knowledge', 'tools', 'analysis', 'settings'];
+const navPages: Page[] = ['dashboard', 'cases', 'procurement', 'knowledge', 'tools', 'analysis', 'settings'];
 const icons: Record<Page, string> = {
-  dashboard: '◫', cases: '▤', knowledge: '▧', tools: '⚒', analysis: '◷', settings: '⚙'
+  dashboard: '◫', cases: '▤', procurement:'▦', knowledge: '▧', tools: '⚒', analysis: '◷', settings: '⚙'
 };
 
 function readLang(): Lang {
@@ -29,6 +31,10 @@ export default function App() {
   const [focusCaseId, setFocusCaseId] = useState<string | null>(null);
   const [newCaseSignal, setNewCaseSignal] = useState(0);
   const [toastMsg, setToastMsg] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const guard = () => !dirty || window.confirm(lang === 'zh' ? '当前有未保存内容，放弃并继续？' : 'Discard unsaved changes and continue?');
+  useEffect(() => {setWorkspaceId(me?.activeTenantId || '');},[me?.activeTenantId]);
+  useEffect(() => { const handler=(event:BeforeUnloadEvent)=>{if(dirty){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
 
   const [loginEmail, setLoginEmail] = useState('admin@workhub.demo');
   const [loginPassword, setLoginPassword] = useState('demo1234');
@@ -56,7 +62,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
-    document.title = lang === 'zh' ? 'AI WorkHub V2 · 企业提效工作台' : 'AI WorkHub V2 · Business Productivity';
+    document.title = lang === 'zh' ? 'AI WorkHub V3 · 企业工作台' : 'AI WorkHub V3 · Business Workspace';
   }, [lang]);
 
   const toast = (message: string) => {
@@ -94,7 +100,9 @@ export default function App() {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if(!guard()) return;
+    try {await api.logout();} catch(error) {if(!(error instanceof ApiError && error.status===401)){toast(error instanceof Error?error.message:'Logout failed');return;}}
     clearToken();
     setMe(null);
     setPage('dashboard');
@@ -102,15 +110,18 @@ export default function App() {
   };
 
   const unauthorized = () => {
-    logout();
+    clearToken();setMe(null);setWorkspaceId('');setDirty(false);setPage('dashboard');setFocusCaseId(null);
     toast(t(lang, 'sessionExpired'));
   };
 
   const switchTenant = async (tenantId: string) => {
     if (!me || tenantId === me.activeTenantId) return;
+    if(!guard())return;
     try {
       const session = await api.switchTenant(tenantId);
       setMe(session);
+      setWorkspaceId(session.activeTenantId);
+      setPage('dashboard');setDirty(false);
       setFocusCaseId(null);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -146,7 +157,7 @@ export default function App() {
               <div className="brandsub">{t(lang, 'brandSub')}</div>
             </div>
           </div>
-          <div className="login-kicker">AI WORKHUB / V2.0</div>
+          <div className="login-kicker">AI WORKHUB / V3.1</div>
           <h1 className="login-title">{t(lang, 'overviewTitle')}</h1>
           <p className="login-copy">{t(lang, 'overviewDesc')}</p>
           <div className="login-points">
@@ -158,7 +169,7 @@ export default function App() {
         <section className="login-formside">
           <div className="login-card">
             <div className="flex between" style={{ marginBottom: 18 }}>
-              <span className="eyebrow">AI WORKHUB / V2.0</span>
+              <span className="eyebrow">AI WORKHUB / V3.1</span>
               <div className="lang">
                 <button className={lang === 'zh' ? 'active' : ''} onClick={() => setLanguage('zh')}>中文</button>
                 <button className={lang === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>EN</button>
@@ -223,7 +234,7 @@ export default function App() {
           <div className="section-label">{t(lang, 'navTag')}</div>
           <nav className="nav">
             {navPages.map((item) => (
-              <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>
+              <button key={item} className={page === item ? 'active' : ''} onClick={() => {if(item===page||guard()){setPage(item);setDirty(false);}}}>
                 <span className="ic">{icons[item]}</span>
                 <span>{t(lang, item as I18nKey)}</span>
               </button>
@@ -258,13 +269,14 @@ export default function App() {
             </div>
           </div>
         </div>
-        <div className="workspace">
+        <div className="workspace" key={tenantId}>
+          {page==='procurement'&&<ProcurementPage/>}
           {page === 'dashboard' && (
             <DashboardPage lang={lang} tenantId={tenantId} toast={toast} navigate={setPage}
               openCase={openCase} newCase={startNewCase} />
           )}
           {page === 'cases' && (
-            <CasesPage lang={lang} tenantId={tenantId} focusCaseId={focusCaseId}
+            <CasesPage lang={lang} tenantId={tenantId} me={me} onDirty={setDirty} focusCaseId={focusCaseId}
               onFocusConsumed={() => setFocusCaseId(null)} newCaseSignal={newCaseSignal}
               toast={toast} onUnauthorized={unauthorized} />
           )}
@@ -283,7 +295,7 @@ export default function App() {
               onUnauthorized={unauthorized} onLogout={logout} />
           )}
           <div className="bottomnote">
-            AI WorkHub V2.0 · {t(lang, 'sampleLabel')} · {t(lang, 'engineOff')}
+            AI WorkHub V3.1 · {t(lang, 'sampleLabel')} · {t(lang, 'engineOff')}
           </div>
         </div>
       </main>
