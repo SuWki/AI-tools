@@ -55,6 +55,12 @@ function saveState(state: DemoSeedState): void {
   localStorage.setItem(DATA_KEY, JSON.stringify(state));
 }
 
+export function patchDemoCase(id:string,patch:Partial<CaseItem>):void {
+  const session=currentSession(),state=loadState(),record=tenantRecord(state,session.tenantId);
+  const item=record.cases.find(c=>c.id===id);if(!item)throw new ApiError(404,'Case not found');
+  Object.assign(item,patch,{updatedAt:Date.now()});saveState(state);
+}
+
 interface DemoSession {
   user: DemoUser;
   tenantId: string;
@@ -180,6 +186,7 @@ function requireText(value: string | undefined, message: string): string {
 }
 
 export const demoApi: ApiClient = {
+  logout: async () => undefined,
   login: async (email: string, password: string) => {
     const trimmed = (email || '').trim();
     if (!trimmed || !password) {
@@ -282,7 +289,7 @@ export const demoApi: ApiClient = {
   },
 
   updateStatus: async (id: string, status: string) => {
-    if (!['open', 'progress', 'done'].includes(status)) {
+    if (!['open', 'progress', 'waiting_customer', 'waiting_internal', 'done'].includes(status)) {
       throw new ApiError(400, 'Unknown case status');
     }
     const session = currentSession();
@@ -525,6 +532,7 @@ export const demoApi: ApiClient = {
 
   exportData: async () => {
     const session = currentSession();
+    if(session.role!=='ADMIN')throw new ApiError(403,'EXPORT_FORBIDDEN');
     const state = loadState();
     const record = tenantRecord(state, session.tenantId);
     return {
@@ -535,6 +543,7 @@ export const demoApi: ApiClient = {
         products: clone(record.products),
         reviews: clone(record.reviews),
         requirements: clone(record.requirements)
+        ,workflows:record.cases.map(c=>({caseId:c.id,workflow:JSON.parse(localStorage.getItem(`workhub.workflow.v3:${session.tenantId}:${c.id}`)||'null')}))
       }
     };
   },
@@ -546,6 +555,7 @@ export const demoApi: ApiClient = {
     }
     const state = loadState();
     const seed = buildSeedState();
+    for(const c of tenantRecord(state,session.tenantId).cases)localStorage.removeItem(`workhub.workflow.v3:${session.tenantId}:${c.id}`);
     state.tenants[session.tenantId] = seed.tenants[session.tenantId];
     saveState(state);
     return { reset: true };

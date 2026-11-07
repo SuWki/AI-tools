@@ -1,0 +1,26 @@
+{
+  "t-compressor": {
+    "nameZh": "Kotech", "nameEn": "Kotech", "noticeZh": "产品参数、认证、价格和交期以企业核验资料为准。", "noticeEn": "Validate specifications, certification, price and delivery against approved company evidence.",
+    "scenarios": [
+      {"id":"stationary","zh":"固定式设备询盘","en":"Stationary equipment","fields":[{"key":"application","zh":"用途与现场工况","en":"Application and operating conditions"},{"key":"pressure","zh":"压力、单位及表压/绝压基准","en":"Pressure, unit and gauge/absolute basis"},{"key":"flow","zh":"气量、单位与计量条件","en":"Air flow, unit and reference conditions"},{"key":"power","zh":"电压 / 相数 / 频率","en":"Voltage / phases / frequency"},{"key":"quantity","zh":"采购数量、交付地与期望日期","en":"Quantity, destination and target date"}]},
+      {"id":"portable","zh":"移动现场设备","en":"Portable site equipment","fields":[{"key":"application","zh":"作业类型与外接设备","en":"Application and connected tools"},{"key":"drive","zh":"柴油 / 电动及适用供电条件","en":"Diesel / electric and applicable supply"},{"key":"pressure","zh":"压力、单位与基准","en":"Pressure, unit and basis"},{"key":"flow","zh":"气量、单位与计量条件","en":"Flow, unit and reference conditions"},{"key":"environment","zh":"海拔、温度及目标市场要求","en":"Altitude, temperature and market requirements"}]},
+      {"id":"parts","zh":"备件识别","en":"Spare-part identification","fields":[{"key":"model","zh":"完整设备型号与序列标识","en":"Full model and serial identification"},{"key":"part","zh":"原件号与数量","en":"Original part number and quantity"},{"key":"evidence","zh":"铭牌 / 旧件资料来源","en":"Nameplate / original-part evidence"},{"key":"purpose","zh":"更换目的及适配限制","en":"Replacement purpose and compatibility limits"}]}
+    ]
+  },
+  "t-alpaca": {
+    "nameZh":"Warmpaca","nameEn":"Warmpaca","noticeZh":"款式、材质、可售状态与到货时间分别核验；无实时库存接口。","noticeEn":"Verify variants, material, availability and arrival separately. Inventory is checked manually.",
+    "scenarios":[
+      {"id":"gift","zh":"国内零售 / 礼赠","en":"Domestic retail / gifts","fields":[{"key":"sku","zh":"款式、SKU、颜色与尺寸","en":"Style, SKU, colour and size"},{"key":"quantity","zh":"数量与包装偏好","en":"Quantity and packaging"},{"key":"destination","zh":"收货地区与期望收到日期","en":"Delivery region and required arrival date"},{"key":"availability","zh":"可售与履约核验来源、人员及时间","en":"Availability / fulfilment source, verifier and time"}]},
+      {"id":"wholesale","zh":"批量 / 经销采购","en":"Wholesale / distribution","fields":[{"key":"buyer","zh":"采购用途及买方类型","en":"Purpose and buyer type"},{"key":"items","zh":"SKU 明细、变体与数量","en":"SKU lines, variants and quantities"},{"key":"custom","zh":"样品、包装与定制要求","en":"Sample, packaging and customisation"},{"key":"delivery","zh":"地区、时间及供货核验","en":"Destination, target date and supply verification"}]},
+      {"id":"service","zh":"售后受理","en":"After-sales care","fields":[{"key":"order","zh":"已核实外部订单引用","en":"Verified external order reference"},{"key":"item","zh":"商品、变体及批次","en":"Product, variant and batch"},{"key":"issue","zh":"问题原话、时间与诉求","en":"Reported issue, time and requested resolution"},{"key":"policy","zh":"证据来源与适用政策版本","en":"Evidence and applicable policy version"}]}
+    ]
+  },
+  "t-lubricant": {
+    "nameZh":"上海安特瑞商贸有限公司","nameEn":"上海安特瑞商贸有限公司","noticeZh":"按润滑油贸易背景配置，主营品牌、产品、代理授权及供货政策尚待企业核实。","noticeEn":"Lubricants-trade profile is provisional. Brands, products, authorisation and supply policy require company confirmation.",
+    "scenarios":[
+      {"id":"specified","zh":"指定产品询价","en":"Specified-product enquiry","fields":[{"key":"product","zh":"客户指定品牌与完整产品名称","en":"Requested brand and complete product name"},{"key":"spec","zh":"规格 / 粘度等级原文","en":"Original specification / viscosity grade"},{"key":"pack","zh":"每包装规格、数量与单位","en":"Pack size, quantity and units"},{"key":"delivery","zh":"交付地区与期望日期","en":"Delivery region and target date"},{"key":"terms","zh":"币种、税费、运费及报价有效期","en":"Currency, tax, freight and quotation validity"}]},
+      {"id":"substitution","zh":"用油 / 替代核验","en":"Application / substitution review","fields":[{"key":"equipment","zh":"设备、使用部位与厂家要求","en":"Equipment, application point and OEM requirements"},{"key":"original","zh":"原用油完整名称与更换原因","en":"Original product and reason for replacement"},{"key":"conditions","zh":"温度、负荷及其他工况","en":"Temperature, load and operating conditions"},{"key":"candidate","zh":"候选产品及有效技术资料","en":"Candidate and valid technical evidence"},{"key":"compatibility","zh":"适用、兼容与更换条件的核验依据","en":"Evidence for suitability, compatibility and changeover"}]},
+      {"id":"quality","zh":"质量 / 使用问题","en":"Quality / application issue","fields":[{"key":"order","zh":"外部订单与产品批次","en":"External order and product batch"},{"key":"issue","zh":"问题原话、时间与客户诉求","en":"Reported issue, time and customer request"},{"key":"conditions","zh":"设备工况及已采取措施","en":"Operating conditions and actions already taken"},{"key":"evidence","zh":"照片 / 报告来源及受理责任人","en":"Photo / report references and responsible person"}]}
+    ]
+  }
+}

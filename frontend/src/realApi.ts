@@ -12,7 +12,10 @@ import type {
   SettingsData
 } from './types';
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+let workspaceId = '';
+export function setWorkspaceId(id:string) { workspaceId = id; }
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const startedWorkspace = workspaceId;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined)
@@ -21,7 +24,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
+  if(workspaceId && !path.startsWith('/auth/')) headers['X-Workspace-Id'] = workspaceId;
   const response = await fetch(`/api${path}`, { ...options, headers });
+  if(startedWorkspace !== workspaceId && !path.startsWith('/auth/')) throw new ApiError(409, 'WORKSPACE_CHANGED');
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
     try {
@@ -41,6 +46,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const realApi: ApiClient = {
+  logout: () => request('/auth/logout', {method:'POST'}),
   login: (email: string, password: string) =>
     request<Me>('/auth/login', {
       method: 'POST',

@@ -18,7 +18,12 @@ import java.util.Map;
 @Service
 public class CaseService {
 
-    private static final List<String> STATUSES = Arrays.asList("open", "progress", "done");
+    private static final List<String> STATUSES = Arrays.asList("open", "progress", "waiting_customer", "waiting_internal", "done");
+
+    private String access(SessionContext ctx) {
+        if(ctx.isAdmin()) return "";
+        return " AND (c.owner_id=? OR EXISTS(SELECT 1 FROM case_access a WHERE a.tenant_id=c.tenant_id AND a.case_id=c.id AND a.user_id=?))";
+    }
 
     private final JdbcTemplate jdbc;
     private final AuditService audit;
@@ -33,6 +38,8 @@ public class CaseService {
                 "WHERE c.tenant_id=?";
         List<Object> args = new ArrayList<Object>();
         args.add(ctx.getTenantId());
+        sql += access(ctx);
+        if(!ctx.isAdmin()){args.add(ctx.getUserId());args.add(ctx.getUserId());}
         if (status != null && !status.isEmpty() && !"all".equals(status)) {
             if (!STATUSES.contains(status)) {
                 throw ApiException.badRequest("Unknown case status");
@@ -45,13 +52,12 @@ public class CaseService {
     }
 
     public List<Map<String, Object>> recent(SessionContext ctx, int limit) {
-        return jdbc.query(
-                "SELECT c.*, u.display_name FROM cases c LEFT JOIN users u ON u.id=c.owner_id " +
-                        "WHERE c.tenant_id=? ORDER BY c.created_at DESC LIMIT ?",
-                (rs, i) -> baseCase(rs), ctx.getTenantId(), limit);
+        List<Map<String,Object>> all=list(ctx,null);
+        return all.subList(0,Math.min(limit,all.size()));
     }
 
     public Map<String, Object> detail(SessionContext ctx, String caseId) {
+        requireCase(ctx,caseId);
         List<Map<String, Object>> rows = jdbc.query(
                 "SELECT c.*, u.display_name FROM cases c LEFT JOIN users u ON u.id=c.owner_id " +
                         "WHERE c.tenant_id=? AND c.id=?",
@@ -104,6 +110,8 @@ public class CaseService {
 
     @Transactional
     public Map<String, Object> updateStatus(SessionContext ctx, String caseId, String status) {
+        if("done".equals(status)) throw ApiException.badRequest("WORKFLOW_REQUIRED");
+        requireEditor(ctx,caseId);
         if (!STATUSES.contains(status)) {
             throw ApiException.badRequest("Unknown case status");
         }
@@ -120,6 +128,7 @@ public class CaseService {
 
     @Transactional
     public Map<String, Object> addNote(SessionContext ctx, String caseId, String text) {
+        requireEditor(ctx,caseId);
         if (text == null || text.trim().isEmpty()) {
             throw ApiException.badRequest("Follow-up note is required");
         }
@@ -171,17 +180,27 @@ public class CaseService {
     }
 
     public Map<String, Object> requireCase(SessionContext ctx, String caseId) {
+        List<Object> args=new ArrayList<Object>();args.add(caseId);args.add(ctx.getTenantId());
+        if(!ctx.isAdmin()){args.add(ctx.getUserId());args.add(ctx.getUserId());}
         List<Map<String, Object>> rows = jdbc.query(
-                "SELECT id FROM cases WHERE id=? AND tenant_id=?",
+                "SELECT c.id FROM cases c WHERE c.id=? AND c.tenant_id=?"+access(ctx),
                 (rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<String, Object>();
                     m.put("id", rs.getString("id"));
                     return m;
-                }, caseId, ctx.getTenantId());
+                }, args.toArray());
         if (rows.isEmpty()) {
             throw ApiException.notFound("Case not found");
         }
         return rows.get(0);
+    }
+
+    private void requireEditor(SessionContext ctx,String caseId){
+        requireCase(ctx,caseId);
+        String owner=jdbc.queryForObject("SELECT owner_id FROM cases WHERE tenant_id=? AND id=?",String.class,ctx.getTenantId(),caseId);
+        if(!ctx.isAdmin()&&!ctx.getUserId().equals(owner)) throw ApiException.forbidden("EDITOR_REQUIRED");
+        String status=jdbc.queryForObject("SELECT status FROM cases WHERE tenant_id=? AND id=?",String.class,ctx.getTenantId(),caseId);
+        if("done".equals(status)) throw ApiException.badRequest("CASE_CLOSED");
     }
 
     private Map<String, Object> baseCase(ResultSet rs) throws SQLException {

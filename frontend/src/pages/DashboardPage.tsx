@@ -3,6 +3,9 @@ import { api } from '../api';
 import { t, localized, I18nKey } from '../i18n';
 import type { DashboardData, Lang, Page } from '../types';
 import { CaseRow, Metric, PageHead } from '../ui';
+import { inbox } from '../workflow/client';
+import type { InboxItem } from '../workflow/types';
+import { fmtTime } from '../i18n';
 
 interface Props {
   lang: Lang;
@@ -15,6 +18,8 @@ interface Props {
 
 export default function DashboardPage({ lang, tenantId, toast, navigate, openCase, newCase }: Props) {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [tasks,setTasks] = useState<InboxItem[]>([]);
+  useEffect(()=>{let alive=true;setTasks([]);inbox().then(r=>{if(alive)setTasks(r);}).catch(()=>undefined);return()=>{alive=false;};},[tenantId]);
 
   useEffect(() => {
     let alive = true;
@@ -36,6 +41,7 @@ export default function DashboardPage({ lang, tenantId, toast, navigate, openCas
         descKey="overviewDesc"
         action={<button className="btn primary" onClick={newCase}>＋ {t(lang, 'startCase')}</button>}
       />
+      <section className="panel" style={{marginBottom:20}}><div className="sectionhead"><h2>{lang==='zh'?'我的待办与待审核':'My tasks & approvals'}</h2><span className="pill">{tasks.length}</span></div>{tasks.length===0?<p className="muted">{lang==='zh'?'暂无待办，可登记咨询或继续处理近期工单。':'No pending work. Register an enquiry or continue a recent case.'}</p>:tasks.sort((a,b)=>(a.dueAt||0)-(b.dueAt||0)).map(task=><button className="queue-item" key={task.id} onClick={()=>openCase(task.caseId)}><strong>{task.title||(lang==='zh'?`待审核回复 V${task.version}`:`Reply awaiting approval V${task.version}`)}</strong><span>{task.caseId} · {task.topic}</span>{task.dueAt&&<small>{fmtTime(lang,task.dueAt)} · {task.dueAt<Date.now()?(lang==='zh'?'已逾期':'Overdue'):''}</small>}</button>)}</section>
       {!data ? <div className="panel empty">{t(lang, 'loading')}</div> : (
         <>
           <div className="grid" style={{ marginBottom: 17 }}>

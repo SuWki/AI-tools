@@ -32,8 +32,15 @@ public class AuthController {
 
     @PostMapping("/switch-tenant")
     public Map<String, Object> switchTenant(@RequestAttribute(AuthInterceptor.ATTR) SessionContext ctx,
-                                            @RequestBody Map<String, String> body) {
-        return authService.switchTenant(ctx, body.get("tenantId"));
+                                            @RequestBody Map<String, String> body,
+                                            javax.servlet.http.HttpServletRequest request) {
+        return authService.switchTenant(ctx, body.get("tenantId"), request.getHeader("Authorization").substring(7).trim());
+    }
+
+    @PostMapping("/logout")
+    public Map<String, Boolean> logout(javax.servlet.http.HttpServletRequest request) {
+        authService.logout(request.getHeader("Authorization").substring(7).trim());
+        return java.util.Collections.singletonMap("ok", true);
     }
 
     @PatchMapping("/locale")

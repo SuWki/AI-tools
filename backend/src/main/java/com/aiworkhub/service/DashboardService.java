@@ -22,8 +22,9 @@ public class DashboardService {
     }
 
     public Map<String, Object> dashboard(SessionContext ctx) {
-        int total = count("SELECT COUNT(*) FROM cases WHERE tenant_id=?", ctx.getTenantId());
-        int done = count("SELECT COUNT(*) FROM cases WHERE tenant_id=? AND status='done'", ctx.getTenantId());
+        boolean aggregate=ctx.isAdmin()||"MANAGER".equals(ctx.getRole());
+        int total = aggregate?count("SELECT COUNT(*) FROM cases WHERE tenant_id=?",ctx.getTenantId()):cases.list(ctx,null).size();
+        int done = aggregate?count("SELECT COUNT(*) FROM cases WHERE tenant_id=? AND status='done'",ctx.getTenantId()):cases.list(ctx,"done").size();
         int knowledge = count("SELECT COUNT(*) FROM products WHERE tenant_id=?", ctx.getTenantId());
         int unreviewed = count("SELECT COUNT(*) FROM products WHERE tenant_id=? AND review_status='unreviewed'", ctx.getTenantId());
         Map<String, Object> result = new LinkedHashMap<String, Object>();

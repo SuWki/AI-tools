@@ -11,6 +11,35 @@
   --shadow: 0 5px 20px rgba(19, 43, 63, .052);
 }
 
+.case-layout {display:grid;grid-template-columns:240px minmax(0,1fr);gap:20px;align-items:start}
+.case-content,.case-workspace {min-width:0}
+.case-queue {padding:16px}
+.queue-item {width:100%;display:grid;gap:5px;text-align:left;padding:16px 12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);border-radius:7px}
+.queue-item.active {background:#e2f1ee;box-shadow:inset 3px 0 var(--teal)}
+.queue-item small {color:var(--muted)}
+.case-header {display:flex;justify-content:space-between;align-items:start;gap:12px}
+.case-header p {color:var(--muted);margin-bottom:0}
+.workspace-notice {color:var(--muted);font-size:13px}
+.workflow-tabs {display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);margin:18px 0}
+.workflow-tabs button {border:0;background:transparent;padding:11px 8px;color:var(--muted);border-bottom:3px solid transparent}
+.workflow-tabs button.active {color:var(--teal);border-bottom-color:var(--teal);font-weight:650}
+.workflow-grid {display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);gap:18px;align-items:start}
+.workflow-grid h3 {margin-top:0}
+.workflow-grid .field {margin-top:14px;display:grid;gap:6px}
+.workflow-grid .btn {margin-top:10px}
+.workflow-fields {display:grid;gap:16px;margin:20px 0}
+.workflow-fields fieldset {border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.workflow-fields legend {padding:0 6px;font-weight:600}
+.workflow-fields label {display:grid;gap:5px;margin:8px 0;font-size:13px}
+.task-row {padding:15px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.task-row strong {display:block}.task-row small {color:var(--muted)}
+.task-row summary {cursor:pointer;color:var(--teal)}
+.evidence-row {display:flex;align-items:start;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}
+.evidence-row input {width:auto;margin-top:7px;flex:none}.evidence-row small {display:block;color:var(--muted)}
+.unsaved {font-size:13px;color:#906015}
+@media(max-width:1250px){.case-layout{grid-template-columns:210px minmax(0,1fr)}.workflow-grid{grid-template-columns:1fr}}
+@media(max-width:850px){.case-layout{grid-template-columns:1fr}.case-queue{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}.case-queue .field{margin:0}.workflow-tabs{gap:0}.case-header{flex-wrap:wrap}}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;

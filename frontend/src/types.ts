@@ -1,6 +1,6 @@
 export type Lang = 'zh' | 'en';
 
-export type Page = 'dashboard' | 'cases' | 'knowledge' | 'tools' | 'analysis' | 'settings';
+export type Page = 'dashboard' | 'cases' | 'knowledge' | 'tools' | 'analysis' | 'settings' | 'procurement';
 
 export interface Tenant {
   id: string;
@@ -35,10 +35,11 @@ export interface CaseItem {
   message: string;
   messageEn?: string | null;
   channel: string;
-  status: 'open' | 'progress' | 'done';
+  status: 'open' | 'progress' | 'waiting_customer' | 'waiting_internal' | 'done';
   priority: 'high' | 'normal';
   stage: string;
   ownerName?: string;
+  ownerId?: string;
   createdAt: number;
   updatedAt: number;
   notes?: CaseNote[];
@@ -66,7 +67,7 @@ export interface KnowledgeItem {
   summary: string;
   summaryEn?: string | null;
   source?: string | null;
-  reviewStatus: 'unreviewed' | 'verified';
+  reviewStatus: 'unreviewed' | 'verified' | 'retired';
   verified: boolean;
   version: number;
   updatedAt: number;

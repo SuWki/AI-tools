@@ -10,6 +10,7 @@ import type {
 } from './types';
 
 export interface ApiClient {
+  logout: () => Promise<unknown>;
   login: (email: string, password: string) => Promise<Me>;
   me: () => Promise<Me>;
   switchTenant: (tenantId: string) => Promise<Me>;

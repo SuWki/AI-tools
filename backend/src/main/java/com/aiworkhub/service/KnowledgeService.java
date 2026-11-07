@@ -16,10 +16,12 @@ public class KnowledgeService {
 
     private final JdbcTemplate jdbc;
     private final AuditService audit;
+    private final KnowledgeVersionService versions;
 
-    public KnowledgeService(JdbcTemplate jdbc, AuditService audit) {
+    public KnowledgeService(JdbcTemplate jdbc, AuditService audit, KnowledgeVersionService versions) {
         this.jdbc = jdbc;
         this.audit = audit;
+        this.versions = versions;
     }
 
     public List<Map<String, Object>> list(SessionContext ctx, String q) {
@@ -77,6 +79,7 @@ public class KnowledgeService {
                         "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 id, ctx.getTenantId(), sku, name, summary, source, "unreviewed", 1, now, now);
         audit.log(ctx, "knowledge_created", "product", id, sku);
+        versions.snapshot(ctx,id);
         return find(ctx, id);
     }
 
@@ -85,11 +88,16 @@ public class KnowledgeService {
         if (!ctx.canReviewKnowledge()) {
             throw ApiException.forbidden("Only admin or product reviewer can approve knowledge");
         }
-        find(ctx, productId);
+        Map<String,Object> current=find(ctx, productId);
+        if(Boolean.TRUE.equals(current.get("verified"))) return current;
+        List<String> authors=jdbc.query("SELECT author_id FROM knowledge_versions WHERE tenant_id=? AND product_id=? AND version=?",(rs,i)->rs.getString(1),ctx.getTenantId(),productId,current.get("version"));
+        if(!authors.isEmpty() && ctx.getUserId().equals(authors.get(0))) throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN");
+        if("retired".equals(current.get("reviewStatus"))) throw ApiException.badRequest("INVALID_TRANSITION");
         long now = System.currentTimeMillis();
         jdbc.update("UPDATE products SET review_status='verified', reviewer_id=?, version=version+1, updated_at=? " +
                 "WHERE id=? AND tenant_id=?", ctx.getUserId(), now, productId, ctx.getTenantId());
         audit.log(ctx, "knowledge_reviewed", "product", productId, "verified");
+        versions.snapshot(ctx,productId);
         return find(ctx, productId);
     }
 

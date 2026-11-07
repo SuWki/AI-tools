@@ -19,6 +19,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleOther(Exception ex) {
         return ResponseEntity.status(500)
-                .body(Collections.singletonMap("error", ex.getMessage() == null ? "Server error" : ex.getMessage()));
+                .body(Collections.singletonMap("error", "SERVER_ERROR"));
     }
 }

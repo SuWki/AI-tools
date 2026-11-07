@@ -1,5 +1,6 @@
 import type { CaseItem, Lang } from './types';
 import { I18nKey, t, fmtTime, localized } from './i18n';
+import { stateLabel } from './workflow/labels';
 
 export function PageHead({ lang, titleKey, descKey, action }: {
   lang: Lang;
@@ -46,7 +47,7 @@ export function CaseRow({ lang, item, selected, onSelect }: {
         <small>{topic} · {item.channel}</small>
       </div>
       <span className={`tag ${item.status === 'done' ? 'ok' : item.status === 'open' ? 'open' : ''}`}>
-        {t(lang, statusKey)}
+        {stateLabel(lang, item.status)}
       </span>
     </button>
   );

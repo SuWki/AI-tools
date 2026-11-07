@@ -24,6 +24,7 @@ public class DataSeeder implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         Integer tenants = jdbc.queryForObject("SELECT COUNT(*) FROM tenants", Integer.class);
         if (tenants != null && tenants > 0) {
+            updateDemoIdentity();
             return;
         }
         long now = System.currentTimeMillis();
@@ -56,9 +57,23 @@ public class DataSeeder implements ApplicationRunner {
         seedTenantData("t-compressor", now);
         seedTenantData("t-lubricant", now);
         seedTenantData("t-alpaca", now);
+        updateDemoIdentity();
+    }
+
+    private void updateDemoIdentity() {
+        jdbc.update("UPDATE tenants SET name_zh='Kotech',name_en='Kotech' WHERE id='t-compressor' AND name_zh='空压机设备公司'");
+        jdbc.update("UPDATE tenants SET name_zh='Warmpaca',name_en='Warmpaca' WHERE id='t-alpaca' AND name_zh='羊驼工艺品公司'");
+        jdbc.update("UPDATE tenants SET name_zh='上海安特瑞商贸有限公司',name_en='上海安特瑞商贸有限公司' WHERE id='t-lubricant' AND name_zh='润滑油贸易公司'");
+        for(String tenant:new String[]{"t-compressor","t-lubricant","t-alpaca"}) {
+            jdbc.update("INSERT OR IGNORE INTO memberships(id,user_id,tenant_id,role) SELECT ?,id,?,'REVIEWER' FROM users WHERE id='U-REVIEWER-C'", "review-"+tenant,tenant);
+            jdbc.update("INSERT OR IGNORE INTO memberships(id,user_id,tenant_id,role) SELECT ?,id,?,'MANAGER' FROM users WHERE id='U-MANAGER-C'", "manage-"+tenant,tenant);
+        }
     }
 
     public void resetTenant(String tenantId) {
+        jdbc.update("DELETE FROM knowledge_versions WHERE tenant_id=?",tenantId);
+        jdbc.update("DELETE FROM case_workflows WHERE tenant_id=?",tenantId);
+        jdbc.update("DELETE FROM case_access WHERE tenant_id=?",tenantId);
         jdbc.update("DELETE FROM case_notes WHERE tenant_id=?", tenantId);
         jdbc.update("DELETE FROM cases WHERE tenant_id=?", tenantId);
         jdbc.update("DELETE FROM products WHERE tenant_id=?", tenantId);

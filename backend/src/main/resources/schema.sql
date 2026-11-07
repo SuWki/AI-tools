@@ -114,3 +114,24 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_tenant ON audit_logs(tenant_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS case_workflows (
+  tenant_id TEXT NOT NULL,
+  case_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, case_id)
+);
+CREATE TABLE IF NOT EXISTS case_access (
+  tenant_id TEXT NOT NULL, case_id TEXT NOT NULL, user_id TEXT NOT NULL,
+  PRIMARY KEY(tenant_id,case_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS knowledge_versions (
+  tenant_id TEXT NOT NULL, product_id TEXT NOT NULL, version INTEGER NOT NULL,
+  content TEXT NOT NULL, status TEXT NOT NULL, author_id TEXT,
+  created_at INTEGER NOT NULL, reviewer_id TEXT, reviewed_at INTEGER,
+  PRIMARY KEY(tenant_id,product_id,version)
+);
+CREATE TABLE IF NOT EXISTS procurement_projects (
+ id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL
+);
