@@ -29,6 +29,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Test procurement demo
+        working-directory: frontend
+        run: npm run test:procurement
+
       # Pages is static-only: build with the repository sub-path and the
       # browser-local demo backend so no /api requests are made.
       - name: Build demo bundle
