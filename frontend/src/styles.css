@@ -11,6 +11,24 @@
   --shadow: 0 5px 20px rgba(19, 43, 63, .052);
 }
 
+.standalone-procurement{max-width:1480px;margin:auto;padding:32px}
+.demo-proc-head{display:flex;justify-content:space-between;gap:20px;align-items:start;margin-bottom:20px;flex-wrap:wrap}
+.demo-proc-head h1{font-size:28px;margin:6px 0}.demo-proc-head p{color:var(--muted)}
+.proc-steps{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
+.proc-steps span{padding:10px 14px;border-radius:7px;background:#e5edef;color:#526676}
+.proc-steps span.current{background:var(--teal);color:white}
+.proc-rolebar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:16px 0}
+.proc-rolebar label{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.procurement-demo .panel{margin-bottom:20px;min-width:0}.procurement-demo .field{display:grid;gap:6px;margin:14px 0}
+.procurement-demo .btn{margin:6px 8px 6px 0}.procurement-demo small{color:var(--muted)}
+.proc-fees{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:20px 0}
+.proc-fees label{display:grid;gap:6px}.proc-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:20px 0}
+.proc-kpis>div{display:grid;gap:8px;padding:16px;background:#eff6f5;border-radius:8px}.proc-kpis strong{font-size:26px}
+.proc-table-wrap{overflow-x:auto}.proc-table{width:100%;border-collapse:collapse;text-align:left}
+.proc-table th,.proc-table td{padding:12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.proc-table td.minimum{background:#e2f3eb;color:#126743;font-weight:650}.proc-table small{display:block;font-weight:400}
+@media(max-width:700px){.standalone-procurement{padding:16px}.proc-kpis{grid-template-columns:1fr}.proc-fees{grid-template-columns:1fr}.proc-rolebar select{max-width:100%}.demo-proc-head h1{font-size:23px}.procurement-demo .workflow-grid{grid-template-columns:1fr}}
+
 .case-layout {display:grid;grid-template-columns:240px minmax(0,1fr);gap:20px;align-items:start}
 .case-content,.case-workspace {min-width:0}
 .case-queue {padding:16px}

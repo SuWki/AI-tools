@@ -270,7 +270,7 @@ export default function App() {
           </div>
         </div>
         <div className="workspace" key={tenantId}>
-          {page==='procurement'&&<ProcurementPage/>}
+          {page==='procurement'&&<ProcurementPage tenantId={tenantId}/>}
           {page === 'dashboard' && (
             <DashboardPage lang={lang} tenantId={tenantId} toast={toast} navigate={setPage}
               openCase={openCase} newCase={startNewCase} />
