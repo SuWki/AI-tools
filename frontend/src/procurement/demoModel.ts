@@ -6,6 +6,17 @@ export type Action = {type:'publish';title:string;route:string;cargo:string;term
 export function cents(raw:string,signed=false):bigint {if(!(signed?/^-?\d+(\.\d{1,2})?$/:/^\d+(\.\d{1,2})?$/).test(raw.trim()))throw Error('请填写有效金额，最多两位小数；空白不是零。');const s=raw.trim(),negative=s.startsWith('-'),[a,b='']=s.replace('-','').split('.');const n=BigInt(a)*100n+BigInt(b.padEnd(2,'0'));if(n>99999999999900n)throw Error('金额超出演示范围');return negative?-n:n;}
 export function money(n:bigint):string {return `${n<0n?'-':''}${(n<0n?-n:n)/100n}.${String((n<0n?-n:n)%100n).padStart(2,'0')}`;}
 export function total(values:string[]):string{return money(values.reduce((a,v)=>a+cents(v),0n));}
+/** Import an ordered amount column or exact-name/amount rows; never submit automatically. */
+export function parseQuotePaste(raw:string,fees:string[]):string[]{
+ const rows=raw.trim().split(/\r?\n/).map(r=>r.trim()).filter(Boolean);
+ if(rows.length!==fees.length)throw Error(`需要 ${fees.length} 行报价，当前为 ${rows.length} 行。请检查是否包含表头或漏项。`);
+ const cells=rows.map(r=>r.split('\t').map(v=>v.trim()));
+ if(cells.every(r=>r.length===1))return cells.map(r=>money(cents(r[0].replace(/^[¥￥]\s*/,''))));
+ if(!cells.every(r=>r.length===2))throw Error('请粘贴单列金额，或“费用名称 + 金额”两列；不要混合格式。');
+ const found=new Map<string,string>();
+ for(const [name,value] of cells){if(!fees.includes(name))throw Error(`未知费用科目：${name}，请核对名称，系统不会按位置猜测。`);if(found.has(name))throw Error(`费用重复：${name}`);found.set(name,money(cents(value.replace(/^[¥￥]\s*/,''))));}
+ return fees.map(name=>{const value=found.get(name);if(value===undefined)throw Error(`缺少费用：${name}`);return value;});
+}
 export function seed():DemoState {return {version:1,title:'上海 → 重庆 · 10 吨货物运输询价',route:'上海仓库 → 重庆收货仓',cargo:'10 吨 / 20 立方 / 40 件普通货物，整单含装卸配送',terms:'CNY 含税整单价；十项科目服务范围一致，不含未声明附加费用。报价与承接均为虚构演示。',deadline:'2026-12-31T17:00',fees:[...feeNames],phase:'draft',suppliers:[{id:'A',name:'供应商 A · 远航物流',sample:['200','150','80','2800','100','50','100','200','60','0'],quotes:[],responses:[]},{id:'B',name:'供应商 B · 速达运输',sample:['180','200','60','2600','150','80','120','220','70','0'],quotes:[],responses:[]},{id:'C',name:'供应商 C · 联运服务',sample:['220','120','100','2900','80','60','90','180','50','0'],quotes:[],responses:[]}],offers:[],changes:[],completed:false,events:[]};}
 function check(ok:unknown,message:string):asserts ok {if(!ok)throw Error(message);}
 function prices(s:DemoState,values:string[]){check(values.length===s.fees.length,'需要逐项填写全部费用');values.forEach(v=>cents(v));return values.map(v=>money(cents(v)));}

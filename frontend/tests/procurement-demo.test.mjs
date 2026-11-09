@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
 const source=await readFile(new URL('../src/procurement/demoModel.ts',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ES2020}}).outputText;
-const {seed,reduce,comparison,metrics,total,cents}=await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const {seed,reduce,comparison,metrics,total,cents,parseQuotePaste}=await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const published=()=>{const s=seed();return reduce(s,{type:'publish',title:s.title,route:s.route,cargo:s.cargo,terms:s.terms,deadline:s.deadline,fees:s.fees});};
 const quoted=()=>{let s=published();for(const p of s.suppliers)s=reduce(s,{type:'quote',supplierId:p.id,amounts:p.sample,note:''});return s;};
 const offered=()=>{let s=reduce(quoted(),{type:'close'});return reduce(s,{type:'offer',amounts:comparison(s).minima.map(v=>v.amount),terms:'整单同范围含税承接'});};
@@ -37,4 +37,17 @@ test('fee applications require confirmation, completion updates denominators and
 });
 test('supplier withdrawal is a separate recorded event, never a completed case',()=>{
  let s=offered();s=reduce(s,{type:'respond',supplierId:'C',decision:'accept',note:''});s=reduce(s,{type:'award',supplierId:'C'});s=reduce(s,{type:'withdraw',reason:'模拟供应商无法安排运力'});const m=metrics(s)[2];assert.equal(m.withdrawn,true);assert.equal(m.completed,false);assert.throws(()=>reduce(s,{type:'complete'}));
+});
+test('paste imports an amount column or reordered named rows without submitting',()=>{
+ const s=seed(),fees=s.fees,values=s.suppliers[0].sample;
+ assert.deepEqual(parseQuotePaste(values.join('\n'),fees),values.map(v=>moneyValue(v)));
+ const rows=fees.map((f,i)=>`${f}\t￥${values[i]}`).reverse();
+ assert.deepEqual(parseQuotePaste(rows.join('\n'),fees),values.map(v=>moneyValue(v)));
+ assert.equal(s.suppliers[0].quotes.length,0);
+ function moneyValue(v){return (Number(v)).toFixed(2);}
+});
+test('paste refuses missing, duplicate, unknown, negative and ambiguous amounts',()=>{
+ const fees=['提货','配送'];
+ for(const raw of ['100','提货\t100\n提货\t200','未知\t100\n配送\t200','100\n-1','提货\t100\n200','100\n1.001'])assert.throws(()=>parseQuotePaste(raw,fees));
+ assert.deepEqual(parseQuotePaste('0\n100.25',fees),['0.00','100.25']);
 });
