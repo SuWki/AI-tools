@@ -51,3 +51,21 @@ test('paste refuses missing, duplicate, unknown, negative and ambiguous amounts'
  for(const raw of ['100','提货\t100\n提货\t200','未知\t100\n配送\t200','100\n-1','提货\t100\n200','100\n1.001'])assert.throws(()=>parseQuotePaste(raw,fees));
  assert.deepEqual(parseQuotePaste('0\n100.25',fees),['0.00','100.25']);
 });
+
+const supplierSource=await readFile(new URL('../src/procurement/supplierData.ts',import.meta.url),'utf8');
+const supplierCompiled=ts.transpileModule(supplierSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ES2020}}).outputText.replace('./demoModel',`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const {demoSuppliers,realSuppliers,supplierSummary}=await import(`data:text/javascript;base64,${Buffer.from(supplierCompiled).toString('base64')}`);
+test('supplier history isolates quotes and uses latest response per offer',()=>{
+ let s=offered();s=reduce(s,{type:'respond',supplierId:'A',decision:'accept',note:''});s=reduce(s,{type:'respond',supplierId:'A',decision:'reject',note:'运力不足'});
+ const rows=demoSuppliers(s),a=rows.filter(r=>r.name===s.suppliers[0].name),m=supplierSummary(a);
+ assert.equal(m.accepted,0);assert.equal(m.offers,1);assert.equal(m.versions,1);assert.deepEqual(a[0].quotes,s.suppliers[0].quotes);assert.equal(supplierSummary(rows.filter(r=>r.name===s.suppliers[1].name)).accepted,0);
+});
+test('supplier changes use completed denominator and approved delta only',()=>{
+ let s=offered();s=reduce(s,{type:'respond',supplierId:'A',decision:'accept',note:''});s=reduce(s,{type:'award',supplierId:'A'});s=reduce(s,{type:'change',delta:'100',reason:'增加装卸'});
+ let a=demoSuppliers(s).filter(r=>r.awarded);assert.equal(supplierSummary(a).completed,0);assert.equal(supplierSummary(a).delta,'0.00');
+ s=reduce(s,{type:'approveChange',id:s.changes[0].id,confirmation:'双方核准'});s=reduce(s,{type:'complete'});a=demoSuppliers(s).filter(r=>r.awarded);assert.equal(supplierSummary(a).changed,1);assert.equal(supplierSummary(a).completed,1);assert.equal(supplierSummary(a).delta,'100.00');
+});
+test('database supplier adapter keeps invitation ownership',()=>{
+ const rows=realSuppliers({id:'p1',title:'运输',status:'closed',deadline:1,invitations:[{id:'a',name:'甲'},{id:'b',name:'乙'}],items:[{name:'运输'}],quotes:[{supplierId:'a',amounts:['100'],conditions:'',at:1}],offers:[{id:'o',amounts:['90']}],responses:[{supplierId:'a',offerId:'o',decision:'accept'}],award:{supplierId:'a'},completedAt:2,changes:[]});
+ assert.equal(rows[0].quotes.length,1);assert.equal(rows[1].quotes.length,0);assert.equal(rows[1].awarded,false);assert.equal(rows[1].responses[0].decision,'pending');assert.equal(supplierSummary([rows[0]]).accepted,1);
+});
