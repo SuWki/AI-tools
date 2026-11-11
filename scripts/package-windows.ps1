@@ -3,8 +3,10 @@ $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
 $runtimeRoot=(Resolve-Path -LiteralPath $RuntimePath).Path
 if(-not(Test-Path -LiteralPath (Join-Path $runtimeRoot 'bin\java.exe'))){throw 'RuntimePath must contain bin/java.exe. Supply a runtime you are licensed to redistribute.'}
+$previousDemo=$env:VITE_DEMO_MODE; $previousBase=$env:VITE_BASE
+$env:VITE_DEMO_MODE='false'; $env:VITE_BASE='/'
 Push-Location (Join-Path $projectRoot 'frontend')
-try { & npm.cmd run build; if($LASTEXITCODE -ne 0){throw 'Frontend build failed'} } finally {Pop-Location}
+try { & npm.cmd run build; if($LASTEXITCODE -ne 0){throw 'Frontend build failed'} } finally {Pop-Location; $env:VITE_DEMO_MODE=$previousDemo; $env:VITE_BASE=$previousBase}
 Push-Location (Join-Path $projectRoot 'backend')
 try { & mvn.cmd -o package; if($LASTEXITCODE -ne 0){throw 'Backend build/tests failed'} } finally {Pop-Location}
 $output=Join-Path $projectRoot ('release\AIWorkHub-'+(Get-Date -Format 'yyyyMMdd-HHmmss'))

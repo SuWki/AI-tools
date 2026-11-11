@@ -1,10 +1,12 @@
 # AI WorkHub V2 · MVP
 
+> 2026-11-10 当前文档入口：[平台维护文档](docs/handbook/README.md)。新增四份 Word：整体优化与后续设计、业务逻辑、开发接手、部署与验收。代码基线 a1fa1f7；下方旧版本功能与验证表保留为历史，请以新文档和当前源码核对完成度。
+
 > 2026-11-07 新增采购模块（后端 3.2.0）：独立供应商报价链接、同口径比价、目标价回复、承接、变更及统计。提供带运行时的 Windows 体验 ZIP，见 [采购模块使用说明](docs/PROCUREMENT-README.md)。尚未部署公网门户；体验包不是生产安装验收。
 
 > 当前开发版本：V3.1。已接入三企业场景和版本化工单工作区，详见 [V3 开发与验证记录](docs/V3-development-status.md)。下方 V2 验证表为历史记录，不能代替 V3 验收。
 >
-> 新版后端构建命令：`mvn test`、`mvn package`，启动产物为 `backend/target/workhub-backend-3.1.0.jar`。前端仍使用 `npm run dev` / `npm run build`。若需使用独立后端端口，可设置 `VITE_API_TARGET`，例如 `http://127.0.0.1:18080`。
+> 新版后端构建命令：`mvn test`、`mvn package`，启动产物为 `backend/target/workhub-backend-3.2.0.jar`。前端仍使用 `npm run dev` / `npm run build`。若需使用独立后端端口，可设置 `VITE_API_TARGET`，例如 `http://127.0.0.1:18080`。
 
 企业内部 AI 提效工作台的最小可运行版本：以「客户咨询 → 需求确认 → 回复草稿 → 跟进闭环」为主流程，辅以产品知识、业务工具、复盘分析和企业级数据隔离。
 
@@ -58,7 +60,7 @@ D:\AI-tools
 ```powershell
 cd D:\AI-tools\backend
 mvn clean package -DskipTests
-java -jar target\workhub-backend-3.1.0.jar
+java -jar target\workhub-backend-3.2.0.jar
 ```
 
 - 端口：`8080`
@@ -70,7 +72,7 @@ java -jar target\workhub-backend-3.1.0.jar
 ```powershell
 # 方式 A：停掉后端，删除数据库后重启
 Remove-Item D:\AI-tools\backend\data\workhub.db
-java -jar target\workhub-backend-3.1.0.jar
+java -jar target\workhub-backend-3.2.0.jar
 ```
 
 也可在页面「设置」中使用「重置演示数据」（仅 ADMIN），或在 API 中调用 `POST /api/admin/reset-demo`。
