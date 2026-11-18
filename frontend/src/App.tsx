@@ -149,27 +149,10 @@ export default function App() {
   if (!me) {
     return (
       <div className="login-shell">
-        <section className="login-brandside">
-          <div className="login-logo">
-            <div className="brandmark">W</div>
-            <div>
-              <div className="brandmain">AI WorkHub</div>
-              <div className="brandsub">{t(lang, 'brandSub')}</div>
-            </div>
-          </div>
-          <div className="login-kicker">AI WORKHUB / V3.1</div>
-          <h1 className="login-title">{t(lang, 'overviewTitle')}</h1>
-          <p className="login-copy">{t(lang, 'overviewDesc')}</p>
-          <div className="login-points">
-            <div className="login-point"><span>✓</span><span>{t(lang, 'w2')}</span></div>
-            <div className="login-point"><span>✓</span><span>{t(lang, 'w3')}</span></div>
-            <div className="login-point"><span>✓</span><span>{t(lang, 'replyHint')}</span></div>
-          </div>
-        </section>
         <section className="login-formside">
           <div className="login-card">
             <div className="flex between" style={{ marginBottom: 18 }}>
-              <span className="eyebrow">AI WORKHUB / V3.1</span>
+              <strong className="wordmark">WorkHub</strong>
               <div className="lang">
                 <button className={lang === 'zh' ? 'active' : ''} onClick={() => setLanguage('zh')}>中文</button>
                 <button className={lang === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>EN</button>
@@ -180,21 +163,21 @@ export default function App() {
             {loginError && <div className="login-error">{loginError}</div>}
             <form onSubmit={(event) => { event.preventDefault(); login(); }}>
               <div className="field">
-                <label>{t(lang, 'email')}</label>
-                <input type="email" value={loginEmail} required autoComplete="username"
+                <label htmlFor="login-email">{t(lang, 'email')}</label>
+                <input id="login-email" type="email" value={loginEmail} required autoComplete="username"
                   onChange={(event) => setLoginEmail(event.target.value)} />
               </div>
               <div className="field">
-                <label>{t(lang, 'password')}</label>
-                <input type="password" value={loginPassword} required autoComplete="current-password"
+                <label htmlFor="login-password">{t(lang, 'password')}</label>
+                <input id="login-password" type="password" value={loginPassword} required autoComplete="current-password"
                   onChange={(event) => setLoginPassword(event.target.value)} />
               </div>
               <button className="btn primary login-submit" type="submit" disabled={loginBusy}>
                 {loginBusy ? t(lang, 'loggingIn') : t(lang, 'signIn')}
               </button>
             </form>
-            <div className="demo-box">
-              <div className="tiny-label">{t(lang, 'demoAccounts')}</div>
+            <details className="demo-box"><summary>{t(lang, 'demoAccounts')}</summary>
+
               <p>{t(lang, 'demoHint')}</p>
               <div className="demo-buttons">
                 <button onClick={() => login('admin@workhub.demo', 'demo1234')}>
@@ -211,7 +194,7 @@ export default function App() {
                 </button>
               </div>
               {DEMO_MODE && <p className="smallprint">{t(lang, 'loginDemoNote')}</p>}
-            </div>
+            </details>
           </div>
         </section>
       </div>
@@ -226,30 +209,29 @@ export default function App() {
         <div className="brand">
           <div className="brandmark">W</div>
           <div>
-            <div className="brandmain">AI WorkHub</div>
+            <div className="brandmain">WorkHub</div>
             <div className="brandsub">{t(lang, 'brandSub')}</div>
           </div>
         </div>
         <div>
-          <div className="section-label">{t(lang, 'navTag')}</div>
+          <select className="mobile-page-select" aria-label={lang === 'zh' ? '工作台导航' : 'Workspace navigation'} value={page}
+            onChange={event => { if (guard()) { setPage(event.target.value as Page); setDirty(false); } }}>
+            {navPages.map(item => <option key={item} value={item}>{t(lang, item as I18nKey)}</option>)}
+          </select>
           <nav className="nav">
             {navPages.map((item) => (
-              <button key={item} className={page === item ? 'active' : ''} onClick={() => {if(item===page||guard()){setPage(item);setDirty(false);}}}>
+              <button key={item} className={page === item ? 'active' : ''} onClick={() => {if(item!==page&&guard()){setPage(item);setDirty(false);}}}>
                 <span className="ic">{icons[item]}</span>
                 <span>{t(lang, item as I18nKey)}</span>
               </button>
             ))}
           </nav>
         </div>
-        <div className="side-footer">
-          <strong>● {t(lang, 'demo')}</strong>
-          {t(lang, 'demoNote')}
-        </div>
       </aside>
       <main className="main">
         <div className="topbar">
           <div className="top-left">
-            {t(lang, 'topTag')}
+            WorkHub
             <strong>{t(lang, page as I18nKey)}</strong>
           </div>
           <div className="top-actions">
@@ -294,9 +276,6 @@ export default function App() {
             <SettingsPage lang={lang} me={me} tenantId={tenantId} toast={toast}
               onUnauthorized={unauthorized} onLogout={logout} />
           )}
-          <div className="bottomnote">
-            AI WorkHub V3.1 · {t(lang, 'sampleLabel')} · {t(lang, 'engineOff')}
-          </div>
         </div>
       </main>
       {toastMsg && <div className="toast">{toastMsg}</div>}

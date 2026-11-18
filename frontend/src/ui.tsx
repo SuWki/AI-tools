@@ -11,7 +11,6 @@ export function PageHead({ lang, titleKey, descKey, action }: {
   return (
     <div className="pagehead">
       <div>
-        <div className="eyebrow">AI WORKHUB / {t(lang, 'demo')}</div>
         <h1>{t(lang, titleKey)}</h1>
         <p className="lead">{t(lang, descKey)}</p>
       </div>
@@ -25,7 +24,6 @@ export function Metric({ lang, labelKey, value }: { lang: Lang; labelKey: I18nKe
     <div className="panel metric">
       <div className="label">{t(lang, labelKey)}</div>
       <div className="num">{value}</div>
-      <div className="hint">{t(lang, 'statHint')}</div>
     </div>
   );
 }
