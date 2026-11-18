@@ -69,3 +69,13 @@ test('database supplier adapter keeps invitation ownership',()=>{
  const rows=realSuppliers({id:'p1',title:'运输',status:'closed',deadline:1,invitations:[{id:'a',name:'甲'},{id:'b',name:'乙'}],items:[{name:'运输'}],quotes:[{supplierId:'a',amounts:['100'],conditions:'',at:1}],offers:[{id:'o',amounts:['90']}],responses:[{supplierId:'a',offerId:'o',decision:'accept'}],award:{supplierId:'a'},completedAt:2,changes:[]});
  assert.equal(rows[0].quotes.length,1);assert.equal(rows[1].quotes.length,0);assert.equal(rows[1].awarded,false);assert.equal(rows[1].responses[0].decision,'pending');assert.equal(supplierSummary([rows[0]]).accepted,1);
 });
+
+test('pre-award quote withdrawal retains history and removes the best quote and old acceptance',()=>{
+ let s=offered();
+ s=reduce(s,{type:'respond',supplierId:'B',decision:'accept',note:''});
+ s=reduce(s,{type:'withdrawQuote',supplierId:'B',reason:'车辆不足'});
+ assert.equal(s.suppliers.find(row=>row.id==='B').quotes.length,1);
+ assert.equal(comparison(s).bestSupplier,'A');
+ assert.throws(()=>reduce(s,{type:'award',supplierId:'B'}));
+ assert.equal(supplierSummary(demoSuppliers(s).filter(row=>row.name.startsWith('供应商 B'))).quoteWithdrawn,1);
+});

@@ -3,11 +3,12 @@ interface Props {state:DemoState;role:string;jump:(role:string,tab:string)=>void
 export default function FlowGuide({state:s,role,jump,close}:Props){
  const quoted=s.suppliers.filter(p=>p.quotes.length),missing=s.suppliers.find(p=>!p.quotes.length);
  const offer=s.offers[s.offers.length-1];
- const waiting=s.suppliers.find(p=>p.responses[p.responses.length-1]?.offer!==offer?.version);
- const accepted=s.suppliers.filter(p=>{const r=p.responses[p.responses.length-1];return r?.offer===offer?.version&&r?.decision==='accept';});
+ const waiting=s.suppliers.find(p=>!p.quoteWithdrawal&&p.responses[p.responses.length-1]?.offer!==offer?.version);
+ const accepted=s.suppliers.filter(p=>{const r=p.responses[p.responses.length-1];return !p.quoteWithdrawal&&r?.offer===offer?.version&&r?.decision==='accept';});
  const person=s.suppliers.find(p=>p.id===role);
  let title='',detail='',action='',go=()=>jump('buyer','flow');
  if(s.phase==='draft'){title='下一步：确认需求并发布';detail='先检查路线和货量。费用科目与统一口径已有模板，可按需展开修改。';action='查看待发布需求';}
+ else if(role!=='buyer'&&person?.quoteWithdrawal){title='本轮报价已撤回';detail='报价与撤回原因保留在档案中。';action='返回采购方';}
  else if(role!=='buyer'&&person&&s.award){title='本单已确认承接';detail='报价与回复记录已经保留，返回采购方查看履约、变更与处理结果。';action='查看履约进度';go=()=>jump('buyer','delivery');}
  else if(role!=='buyer'&&person&&s.phase==='closed'&&!offer){title='报价已截止';detail='采购方正在比较报价。已提交的报价可查看，但不能补交。';action='查看采购比价';go=()=>jump('buyer','analysis');}
  else if(role!=='buyer'&&person){

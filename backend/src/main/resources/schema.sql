@@ -135,3 +135,11 @@ CREATE TABLE IF NOT EXISTS knowledge_versions (
 CREATE TABLE IF NOT EXISTS procurement_projects (
  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS procurement_suppliers (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_procurement_supplier_tenant ON procurement_suppliers(tenant_id, name);
