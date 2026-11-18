@@ -11,3 +11,7 @@ export interface Workflow { revision:number; scenario:string; fields:Record<stri
 export interface Member { id:string; name:string; role:string }
 export type Command = { op:string; revision?:number; [key:string]:unknown };
 export interface InboxItem { id:string; kind:'tasks'|'replies'; caseId:string; topic:string; title?:string; dueAt?:number; version?:number; status:string; createdAt:number }
+export interface CaseTarget {
+  caseId: string;
+  inbox?: Pick<InboxItem, 'id' | 'kind' | 'version'>;
+}

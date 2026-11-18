@@ -114,7 +114,13 @@ class WorkflowIntegrationTest {
         call("POST","/api/knowledge/"+doc+"/versions/"+next.path("version").asInt()+"/publish",sales,null,403);
         call("POST","/api/knowledge/"+doc+"/versions/"+next.path("version").asInt()+"/publish",reviewer,null,200);
         assertEquals("EVIDENCE_CHANGED",cmd(sales,id,3,"{\"op\":\"copy\",\"id\":\""+reply+"\"}",400).path("error").asText());
-        assertTrue(call("GET","/api/knowledge/"+doc+"/versions",sales,null,200).size()>=2);
+        // A picker opened before publication must not silently bind to the new version.
+        String reference = "{\"op\":\"evidence\",\"ids\":[\""+doc+"\"],\"versions\":{\""+doc+"\":";
+        assertEquals("EVIDENCE_CHANGED",cmd(sales,id,3,reference+published.path("version").asInt()+"}}",400).path("error").asText());
+        JsonNode updated = cmd(sales,id,3,reference+next.path("version").asInt()+"}}",200);
+        assertEquals(next.path("version").asInt(),updated.path("evidence").get(0).path("version").asInt());
+        assertEquals(published.path("version").asInt(),updated.path("replies").get(0).path("evidence").get(0).path("version").asInt());
+        assertTrue(call("GET","/api/knowledge/"+doc+"/versions",sales,null,200).size() >= 2);
     }
     @Test void initialReviewPreservesPendingRevision()throws Exception{
         String sales=login("sales@compressor.demo"), reviewer=login("reviewer@compressor.demo");
