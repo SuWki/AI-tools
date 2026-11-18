@@ -32,20 +32,22 @@ export default function SupplierPortal() {
   const [conditions,setConditions] = useState(''), [reply,setReply] = useState('');
   const [reason,setReason] = useState(''), [message,setMessage] = useState('');
   const [busy,setBusy] = useState(false), [editing,setEditing] = useState(false);
+  const [loadFailed,setLoadFailed]=useState(false),[attempt,setAttempt]=useState(0);
+  const receipt=useRef<HTMLParagraphElement>(null);
   const [now,setNow] = useState(Date.now);
   const pending = useRef<{body:string; requestId:string}>();
   useEffect(() => {
-    let active = true;
+    let active = true;setLoadFailed(false);setMessage('');
     supplierCall(id).then(p => {
       if (!active) return;
       const quote = p.quotes[p.quotes.length - 1];
       setValues(quote?.amounts ?? p.items.map(() => ''));
       setConditions(quote?.conditions ?? '');
       setProject(p);
-    }).catch(e => { if (active) setMessage(e.message); });
+    }).catch(e => { if (active) { setLoadFailed(true);setMessage(e.message); } });
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
     return () => { active=false; window.clearInterval(clock); };
-  }, [id]);
+  }, [id,attempt]);
 
   async function send(input:object) {
     if (busy) return;
@@ -60,7 +62,10 @@ export default function SupplierPortal() {
     } catch (e) { setMessage(String(e)); }
     finally { setBusy(false); }
   }
-  if (!project) return <main className="supplier-portal"><p role="status">{message || '正在读取询价…'}</p></main>;
+  useEffect(()=>{if(message)receipt.current?.focus();},[message]);
+  if (!project) return <main className="supplier-portal"><p role={loadFailed?'alert':'status'}>{message || '正在读取询价…'}</p>
+    {loadFailed&&<button className="btn" onClick={()=>setAttempt(n=>n+1)}>重新读取邀请</button>}
+  </main>;
   const p=project, fees=p.items.map(i => i.name), last=p.quotes[p.quotes.length-1], offer=p.offers[p.offers.length-1];
   const canQuote=p.status==='published' && now<=p.deadline && !p.responsesFrozen && !p.quoteWithdrawal;
   const canReply=offer && now<=offer.replyDeadline && !p.responsesFrozen && !p.quoteWithdrawal;
@@ -68,7 +73,7 @@ export default function SupplierPortal() {
     <header className="desk-heading"><div><small>{p.supplier.name} · 供应商填报</small><h1>{p.title}</h1><p>{p.route} · {p.cargo}</p></div></header>
     <p>报价截止 {date(p.deadline)} · {p.currency}</p>
     <details className="terms-note" open={canQuote && !last}><summary>统一报价条款</summary><p>{p.terms}</p></details>
-    {message && <p role="status" className="notice">{message}</p>}
+    {message && <p role="status" className="notice supplier-receipt" ref={receipt} tabIndex={-1}>{message}</p>}
     {p.quoteWithdrawal && <p className="notice">报价已撤回 · {p.quoteWithdrawal.reason}</p>}
     {p.responsesFrozen && <p className="notice">承接已锁定，可查看本单回执。</p>}
     {offer && <section className="panel"><h2>采购方目标价 · 第 {p.offers.length} 版</h2>
@@ -84,7 +89,7 @@ export default function SupplierPortal() {
       <form onSubmit={e=>{e.preventDefault();send({op:'quote',amounts:values,conditions});}}>
         <FeeEditor fees={fees} amounts={values} onChange={setValues} disabled={busy} currency={p.currency}/>
         <label className="field">附加条件（选填）<textarea value={conditions} disabled={busy} onChange={e=>setConditions(e.target.value)}/></label>
-        <button className="btn primary" disabled={busy}>提交本家报价</button>
+        <div className="supplier-submit"><button className="btn primary" disabled={busy}>提交本家报价</button></div>
       </form></section> : !last && !offer && <p>本轮报价已截止。</p>}
     {last && <section className="panel"><h2>本家最新报价</h2><p>{p.currency} {total(last.amounts)} · 第 {p.quotes.length} 版 · {date(last.at)}</p>
       {canQuote && !editing && <button className="btn" onClick={()=>setEditing(true)}>修订报价</button>}

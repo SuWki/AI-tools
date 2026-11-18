@@ -1,126 +1,84 @@
-import { useEffect, useState } from 'react';
-import { api, ApiError, DEMO_MODE } from '../api';
-import { t, tenantName, I18nKey } from '../i18n';
-import type { Lang, Me, SettingsData } from '../types';
-import { Metric, PageHead } from '../ui';
-import { request } from '../realApi';
-import { profileOf } from '../workflow/client';
-import { errorMessage } from '../workflow/labels';
+import {useState} from 'react';
+import {api, ApiError, DEMO_MODE} from '../api';
+import {fmtTime, t, tenantName} from '../i18n';
+import type {Lang, Me} from '../types';
+import {request} from '../realApi';
+import {profileOf} from '../workflow/client';
+import {errorMessage, wording} from '../workflow/labels';
 
 interface Props {
-  lang: Lang;
-  me: Me;
-  tenantId: string;
-  toast: (msg: string) => void;
-  onUnauthorized: () => void;
-  onLogout: () => void;
+  lang:Lang; me:Me; tenantId:string; toast:(msg:string)=>void;
+  onUnauthorized:()=>void; onLogout:()=>void; onLanguage:(next:Lang)=>void;
 }
+interface AuditRow {id:string;action:string;entityId:string;actorName:string;createdAt:number}
 
-export default function SettingsPage({ lang, me, tenantId, toast, onUnauthorized, onLogout }: Props) {
-  const [data, setData] = useState<SettingsData | null>(null);
-  const [auditRows,setAuditRows]=useState<Array<{id:string;action:string;entityId:string;actorName:string;createdAt:number}>>([]);
-  const [auditOpen,setAuditOpen]=useState(false);
-
-  const fail = (error: unknown) => {
-    if (error instanceof ApiError && error.status === 401) {
-      onUnauthorized();
-      return;
-    }
-    toast(errorMessage(lang,error));
+export default function SettingsPage({lang,me,tenantId,toast,onUnauthorized,onLogout,onLanguage}:Props){
+  const [auditRows,setAuditRows]=useState<AuditRow[]>();
+  const [busy,setBusy]=useState(false),[failure,setFailure]=useState('');
+  const w=(zh:string,en:string)=>wording(lang,zh,en);
+  const company=tenantName(lang,me.activeTenant);
+  const profile=profileOf(tenantId);
+  const admin=me.role==='ADMIN';
+  const canAudit=!DEMO_MODE&&(admin||me.role==='MANAGER');
+  const scope=w('咨询工单及原话、产品资料、复盘、需求规则和工单流程记录','Enquiries with original messages, product records, reviews, requirement rules and case workflows');
+  const run=async(action:()=>Promise<void>)=>{
+    setBusy(true);setFailure('');
+    try{await action();}catch(error){
+      if(error instanceof ApiError&&error.status===401)onUnauthorized();
+      else setFailure(errorMessage(lang,error));
+    }finally{setBusy(false);}
   };
-
-  useEffect(() => {
-    setData(null);
-    api.settings().then(setData).catch(fail);
-  }, [tenantId, lang]);
-
-  const exportJson = async () => {
-    try {
-      const payload = await api.exportData();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `AI_WorkHub_demo_${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 500);
-      toast(t(lang, 'exportDone'));
-    } catch (error) {
-      fail(error);
-    }
+  const exportJson=()=>{
+    if(!window.confirm(w('导出「'+company+'」的'+scope+'？','Export '+scope+' from '+company+'?')))return;
+    return run(async()=>{
+      const payload=await api.exportData();
+      const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+      const link=document.createElement('a');link.href=url;
+      link.download='WorkHub_'+tenantId+'_'+new Date().toISOString().slice(0,10)+'.json';
+      link.click();window.setTimeout(()=>URL.revokeObjectURL(url),500);
+      toast(t(lang,'exportDone'));
+    });
   };
-
-  const reset = async () => {
-    if (!window.confirm(t(lang, 'resetConfirm'))) return;
-    try {
-      await api.resetDemo();
-      const settings = await api.settings();
-      setData(settings);
-      toast(t(lang, 'resetDone'));
-    } catch (error) {
-      fail(error);
-    }
+  const reset=()=>{
+    const warning=DEMO_MODE?w('恢复浏览器中的示例工单、资料和复盘？','Restore sample enquiries, documents and reviews in this browser?'):
+      w('将工单、知识和复盘替换为样例，并清除原审计记录？','Replace enquiries, knowledge and reviews with samples and clear the old audit log?');
+    if(!window.confirm(company+' · '+warning))return;
+    return run(async()=>{await api.resetDemo();setAuditRows(undefined);toast(t(lang,'resetDone'));});
   };
-
-  const statKeys: Array<[I18nKey, keyof SettingsData['stats']]> = [
-    ['totalCases', 'totalCases'],
-    ['knowledgeCount', 'knowledgeCount'],
-    ['reviewCount', 'reviewCount'],
-    ['doneCases', 'doneCases']
-  ];
-
-  return (
-    <>
-      <PageHead lang={lang} titleKey="settingsTitle" descKey="settingsDesc" />
-      <div className="split-even">
-        <div className="panel">
-          <div className="sectionhead"><h2>{t(lang, 'orgInfo')}</h2></div>
-          <div className="flex">
-            <span className="pill">{tenantName(lang, me.activeTenant)}</span>
-            <span className="pill slate">{t(lang, 'engineOff')}</span>
-          </div>
-          <div className="divider" />
-          <div className="tiny-label">{t(lang, 'languages')}</div>
-          <p className="muted">{t(lang, 'languagesDesc')}</p>
-          <div className="tiny-label">{t(lang, 'storage')}</div>
-          <p className="muted">{t(lang, DEMO_MODE ? 'storageDescDemo' : 'storageDesc')}</p>
-          <div className="tiny-label">{t(lang, 'account')}</div>
-          <div className="settings-account">
-            <span className="pill slate">{me.user.email}</span>
-            {data && <span className="pill slate">{t(lang, 'role')}: {data.role}</span>}
-          </div>
-          <div className="flex role-note">
-            <button className="btn soft" disabled={me.role!=='ADMIN'} onClick={()=>{if(window.confirm(lang==='zh'?`导出 ${tenantName(lang,me.activeTenant)} 的工单原文、知识、复盘及工作流记录？`:`Export case messages, knowledge, reviews and workflows from ${tenantName(lang,me.activeTenant)}?`))exportJson();}}>↧ {t(lang, 'export')}</button>
-            {me.role==='ADMIN'&&<button className="btn danger" onClick={reset}>↺ {t(lang, 'reset')}</button>}
-            <button className="btn" onClick={onLogout}>{t(lang, 'logout')}</button>
-          </div>
-        </div>
-        <div className="panel">
-          <div className="sectionhead"><h2>{t(lang, 'about')}</h2></div>
-          <p>{t(lang, 'aboutDesc')}</p>
-          <div className="divider" />
-          <div className="tiny-label">{t(lang, 'statsTitle')}</div>
-          <p className="smallprint">{t(lang, 'statsDesc')}</p>
-          {data ? (
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              {statKeys.map(([label, key]) => (
-                <Metric key={key} lang={lang} labelKey={label} value={data.stats[key]} />
-              ))}
-            </div>
-          ) : <div className="empty">{t(lang, 'loading')}</div>}
-          <p className="smallprint">{t(lang, 'timeWarning')}</p>
-        </div>
-      </div>
-      <section className="panel" style={{marginTop:20}}><h2>{lang==='zh'?'企业场景与规则':'Business scenarios & rules'}</h2><p>{profileOf(tenantId)[lang==='zh'?'noticeZh':'noticeEn']}</p>{profileOf(tenantId).scenarios.map(s=><details key={s.id} className="task-row"><summary>{s[lang]}</summary>{s.fields.map(f=><p key={f.key}>• {f[lang]}</p>)}</details>)}<p className="smallprint">{lang==='zh'?'当前规则随版本发布；字段与授权配置的在线管理尚未开放。':'Rules are released with this version. Online field and authorisation management is not yet available.'}</p></section>
-      {!DEMO_MODE&&['ADMIN','MANAGER'].includes(me.role)&&<section className="panel" style={{marginTop:20}}><button className="btn" onClick={async()=>{try{setAuditRows(await request('/audit?limit=100'));setAuditOpen(true);}catch(e){fail(e);}}}>{lang==='zh'?'查看企业审计日志':'View workspace audit log'}</button>{auditOpen&&auditRows.map(row=><div key={row.id} className="task-row"><strong>{row.action} · {row.entityId}</strong><small>{row.actorName} · {new Date(row.createdAt).toLocaleString(lang==='zh'?'zh-CN':'en-US')}</small></div>)}</section>}
-      <div className="panel" style={{ marginTop: 16 }}>
-        <div className="sectionhead"><h2>{t(lang, 'legal')}</h2></div>
-        <p className="infochip">{t(lang, 'legalDesc')}</p>
-        <div className="tiny-label" style={{ marginTop: 18 }}>{t(lang, 'roadmap')}</div>
-        <p className="muted">{t(lang, 'roadmapDesc')}</p>
-      </div>
-    </>
-  );
+  return <>
+    <div className="home-heading"><h1>{t(lang,'settings')}</h1></div>
+    {failure&&<p role="alert" className="notice warn">{failure}</p>}
+    <div className="settings-layout">
+      <section className="panel"><h2>{w('账户与语言','Account & language')}</h2>
+        <dl className="document-facts">
+          <div><dt>{t(lang,'account')}</dt><dd>{me.user.email}</dd></div>
+          <div><dt>{t(lang,'role')}</dt><dd>{me.role}</dd></div>
+        </dl>
+        <div className="flex"><label className="field">{t(lang,'languages')}<select value={lang} onChange={e=>onLanguage(e.target.value as Lang)}><option value="zh">中文</option><option value="en">English</option></select></label>
+        <button className="btn" disabled={busy} onClick={onLogout}>{t(lang,'logout')}</button></div>
+      </section>
+      <section className="panel"><h2>{w('企业场景与规则','Business scenarios & rules')}</h2>
+        <p><strong>{company}</strong></p><p>{profile[lang==='zh'?'noticeZh':'noticeEn']}</p>
+        {profile.scenarios.map(s=><details className="task-row" key={s.id}><summary>{s[lang]}</summary><ul>{s.fields.map(f=><li key={f.key}>{f[lang]}</li>)}</ul></details>)}
+      </section>
+      <section className="panel"><h2>{w('数据管理','Data management')}</h2>
+        <p>{DEMO_MODE?w('在线演示写入当前浏览器。','The online demo stores data in this browser.'):
+          w('业务数据保存在本机 SQLite。已配置的供应商门户可联网交换邀请与回执。','Business data is stored in local SQLite. A configured supplier portal can exchange invitations and receipts online.')}</p>
+        {admin?<><details className="task-row"><summary>{w('导出当前企业数据','Export current workspace data')}</summary>
+          <p>{scope}。</p><button className="btn" disabled={busy} onClick={exportJson}>{w('导出 JSON','Export JSON')}</button>
+        </details><details className="task-row"><summary>{t(lang,'reset')}</summary>
+          <p>{w('操作会替换「'+company+'」的工单、知识与复盘数据。采购数据可通过本地备份工具备份。','This replaces enquiries, knowledge and reviews in '+company+'. Procurement data is backed up using the local backup tool.')}</p>
+          <button className="btn danger" disabled={busy} onClick={reset}>{t(lang,'reset')}</button>
+        </details></>:<p className="muted">{w('管理员可导出及重置数据。','Administrators can export and reset data.')}</p>}
+      </section>
+      {canAudit&&<section className="panel"><h2>{w('企业审计','Workspace audit')}</h2>
+        <button className="btn" disabled={busy} onClick={()=>run(async()=>{setAuditRows(await request('/audit?limit=100'));})}>
+          {auditRows?w('刷新最近记录','Refresh recent entries'):w('查看最近记录','Read recent entries')}
+        </button>
+        {auditRows?.length===0&&<p>{w('暂无审计记录。','No audit entries yet.')}</p>}
+        {auditRows?.map(row=><div className="task-row" key={row.id}><strong>{row.action} · {row.entityId}</strong>
+          <small>{row.actorName} · {fmtTime(lang,row.createdAt)}</small></div>)}
+      </section>}
+    </div>
+  </>;
 }

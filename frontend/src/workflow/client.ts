@@ -43,7 +43,7 @@ export async function command(id:string,revision:number,cmd:Command):Promise<Wor
       if(Object.values(values).some(v=>v.status==='confirmed'&&(!v.value.trim()||!v.source.trim())))fail('CONFIRMATION_SOURCE_REQUIRED');
       invalidate();state.scenario=str('scenario');state.fields=values;break;
     }
-    case 'evidence': state.evidence=(cmd.ids as string[]).map(id=>{const k=knowledge.find(k=>k.id===id&&k.verified);if(!k)fail('EVIDENCE_REQUIRED');return {id:k!.id,sku:k!.sku,name:k!.name,summary:k!.summary,source:k!.source||'',version:k!.version};});invalidate();break;
+    case 'evidence': state.evidence=(cmd.ids as string[]).map(id=>{const k=knowledge.find(k=>k.id===id&&k.verified);if(!k)fail('EVIDENCE_REQUIRED');if(cmd.versions&&(cmd.versions as Record<string,number>)[id]!==k!.version)fail('EVIDENCE_CHANGED');return {id:k!.id,sku:k!.sku,name:k!.name,summary:k!.summary,source:k!.source||'',version:k!.version};});invalidate();break;
     case 'draft':invalidate();state.replies.push({id:uid(),version:state.replies.length+1,body:str('text'),lang:cmd.lang as 'zh'|'en',risk:cmd.risk as ReplyVersion['risk'],status:'draft',authorId:me.user.id,authorName:me.user.displayName,createdAt:now,fields:structuredClone(state.fields),evidence:structuredClone(state.evidence)});break;
     case 'submit':case 'approve':case 'reject':case 'copy':case 'dispatch':{
       const r=state.replies.find(r=>r.id===cmd.id);if(!r)fail('NOT_FOUND');const reply=r!;

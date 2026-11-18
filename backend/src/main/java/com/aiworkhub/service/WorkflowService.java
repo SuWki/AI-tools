@@ -125,7 +125,15 @@ public class WorkflowService {
                 for(JsonNode ref:body.path("ids")) {
                     if(!seen.add(ref.asText())) continue;
                     List<Map<String,Object>> rows=jdbc.queryForList("SELECT id,sku,name,summary,source,version FROM products WHERE tenant_id=? AND id=? AND review_status='verified'",ctx.getTenantId(),ref.asText());
-                    if(rows.isEmpty()) fail("EVIDENCE_REQUIRED"); refs.add(json.valueToTree(rows.get(0)));
+                    if(rows.isEmpty()) fail("EVIDENCE_REQUIRED");
+                    JsonNode current = json.valueToTree(rows.get(0));
+                    if (body.has("versions")) {
+                        JsonNode expected = body.path("versions").path(ref.asText());
+                        if (!expected.isIntegralNumber() || expected.asInt() != current.path("version").asInt()) {
+                            fail("EVIDENCE_CHANGED");
+                        }
+                    }
+                    refs.add(current);
                 }
                 if(!refs.equals(state.path("evidence"))){state.set("evidence",refs); invalidate(state);}
                 break;
