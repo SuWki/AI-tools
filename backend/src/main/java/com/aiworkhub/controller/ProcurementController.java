@@ -4,6 +4,8 @@ import com.aiworkhub.auth.*;import com.aiworkhub.service.ProcurementService;impo
 public class ProcurementController {
  private final ProcurementService service;public ProcurementController(ProcurementService service){this.service=service;}
  @GetMapping("/procurement") public List<JsonNode> list(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c){return service.list(c);}
+ @GetMapping("/procurement-suppliers") public List<Map<String,Object>> suppliers(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c){return service.suppliers(c);}
+ @PostMapping("/procurement-suppliers") public JsonNode register(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@RequestBody JsonNode b){return service.registerSupplier(c,b);}
  @GetMapping("/procurement-metrics") public JsonNode metrics(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c){return service.metrics(c);}
  @PostMapping("/procurement") public JsonNode create(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@RequestBody JsonNode b){return service.create(c,b);}
  @GetMapping("/procurement/{id}") public JsonNode get(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@PathVariable String id){return service.get(c,id);}

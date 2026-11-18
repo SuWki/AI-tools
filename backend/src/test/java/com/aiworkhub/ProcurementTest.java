@@ -90,4 +90,63 @@ class ProcurementTest {
      ReflectionTestUtils.setField(service,"relayKey","");
    }
  }
+
+ @Test void supplierIdsSeparateNamesAndBlockDuplicateInvitations() throws Exception {
+   String first=service.registerSupplier(c,b("{\"name\":\"Same name\"}")).path("id").asText();
+   String second=service.registerSupplier(c,b("{\"name\":\"Same name\"}")).path("id").asText();
+   assertNotEquals(first,second);
+   String project=create().path("id").asText(), other=create().path("id").asText();
+   String inviteFirst="{\"op\":\"invite\",\"supplierRecordId\":\""+first+"\"}";
+   assertEquals(first,cmd(project,inviteFirst).path("invitations").get(0).path("supplierRecordId").asText());
+   assertEquals("SUPPLIER_ALREADY_INVITED",assertThrows(ApiException.class,()->cmd(project,inviteFirst)).getMessage());
+   cmd(project,"{\"op\":\"invite\",\"supplierRecordId\":\""+second+"\"}");
+   cmd(other,inviteFirst);
+   SessionContext anotherTenant=new SessionContext("U-ADMIN","t-alpaca","ADMIN","test","Buyer","zh");
+   assertFalse(service.suppliers(anotherTenant).stream().anyMatch(row->first.equals(row.get("id"))));
+   end(project);end(other);
+   JsonNode summaries=service.metrics(c).path("suppliers");
+   for(JsonNode summary:summaries){
+     if(first.equals(summary.path("supplierKey").asText()))assertEquals(2,summary.path("endedInvitations").asInt());
+     if(second.equals(summary.path("supplierKey").asText()))assertEquals(1,summary.path("endedInvitations").asInt());
+   }
+ }
+
+ @Test void preAwardWithdrawalPreservesQuoteAndExcludesItFromComparison() throws Exception {
+   String id=create().path("id").asText(),a=invite(id,"A"),other=invite(id,"B");
+   service.submit(id,a,b("{\"op\":\"quote\",\"requestId\":\"a1\",\"amounts\":[\"10\",\"10\"]}"));
+   service.submit(id,other,b("{\"op\":\"quote\",\"requestId\":\"b1\",\"amounts\":[\"90\",\"90\"]}"));
+   end(id);
+   JsonNode project=cmd(id,"{\"op\":\"offer\",\"amounts\":[\"10\",\"10\"],\"terms\":\"Same scope\",\"replyDeadline\":"+(System.currentTimeMillis()+3600000)+"}");
+   String offer=project.path("offers").get(0).path("id").asText(),supplier=project.path("invitations").get(0).path("id").asText();
+   service.submit(id,a,b("{\"op\":\"respond\",\"requestId\":\"accept\",\"offerId\":\""+offer+"\",\"decision\":\"accept\"}"));
+   JsonNode request=b("{\"op\":\"withdrawQuote\",\"requestId\":\"withdraw\",\"reason\":\"No capacity\"}");
+   service.submit(id,a,request);
+   service.submit(id,a,request);
+   assertEquals(1,service.get(c,id).path("quoteWithdrawals").size());
+   assertEquals(1,service.supplier(id,a).path("quotes").size());
+   assertFalse(service.supplier(id,other).has("quoteWithdrawal"));
+   assertEquals("180.00",service.compare(c,id).path("bestWholeTotal").asText());
+   assertEquals(1,service.compare(c,id).path("excludedWithdrawnQuotes").asInt());
+   assertEquals("QUOTE_WITHDRAWN",assertThrows(ApiException.class,()->cmd(id,"{\"op\":\"award\",\"supplierId\":\""+supplier+"\",\"offerId\":\""+offer+"\",\"reason\":\"Old acceptance\"}")).getMessage());
+ }
+
+ @Test void portalRefusesToFreezeAnAcceptanceAfterQuoteWithdrawal() throws Exception {
+   String id=create().path("id").asText(), token=invite(id,"A"), remote="relay-"+id;
+   service.submit(id,token,b("{\"op\":\"quote\",\"requestId\":\"local\",\"amounts\":[\"10\",\"20\"]}"));
+   ObjectNode publication=((ObjectNode)service.get(c,id)).deepCopy().put("publicationRevision",1);
+   service.relay(remote,publication);
+   service.submit(remote,token,b("{\"op\":\"quote\",\"requestId\":\"quote\",\"amounts\":[\"10\",\"20\"]}"));
+   publication.put("status","closed").put("publicationRevision",2);
+   publication.withArray("offers").addObject().put("id","offer-1").put("replyDeadline",System.currentTimeMillis()+60000);
+   service.relay(remote,publication);
+   JsonNode accepted=service.submit(remote,token,b("{\"op\":\"respond\",\"requestId\":\"accept\",\"offerId\":\"offer-1\",\"decision\":\"accept\"}"));
+   service.submit(remote,token,b("{\"op\":\"withdrawQuote\",\"requestId\":\"withdraw\",\"reason\":\"No capacity\"}"));
+   publication.put("publicationRevision",3).putObject("awardRequest").put("requestId","award")
+       .put("supplierId",publication.path("invitations").get(0).path("id").asText())
+       .put("offerId","offer-1").put("responseId",accepted.path("responses").get(0).path("id").asText());
+   JsonNode receipt=service.relay(remote,publication);
+   assertFalse(receipt.path("awardConfirmed").asBoolean());
+   assertEquals(1,receipt.path("quoteWithdrawals").size());
+   assertFalse(service.supplier(remote,token).path("responsesFrozen").asBoolean());
+ }
 }
