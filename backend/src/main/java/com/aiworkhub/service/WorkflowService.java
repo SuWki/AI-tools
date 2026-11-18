@@ -63,6 +63,17 @@ public class WorkflowService {
         for(JsonNode s:profile(ctx).path("scenarios")) if(s.path("id").asText().equals(id)) return s;
         throw ApiException.badRequest("INVALID_SCENARIO");
     }
+    private boolean sameFields(JsonNode incoming,JsonNode existing){
+        if(incoming.size()!=existing.size())return false;
+        Iterator<String> keys=incoming.fieldNames();
+        while(keys.hasNext()){
+            String key=keys.next();
+            for(String field:Arrays.asList("value","status","source")){
+                if(!incoming.path(key).path(field).equals(existing.path(key).path(field)))return false;
+            }
+        }
+        return true;
+    }
     private void invalidate(ObjectNode state) {
         for(JsonNode n:state.withArray("replies")) if(Arrays.asList("approved","pending").contains(n.path("status").asText())) ((ObjectNode)n).put("status","stale");
     }
@@ -103,7 +114,8 @@ public class WorkflowService {
                     if("confirmed".equals(status) && (f.path("value").asText().isEmpty()||f.path("source").asText().isEmpty())) fail("CONFIRMATION_SOURCE_REQUIRED");
                     f.put("actorId",ctx.getUserId());f.put("at",now); fields.set(key,f);
                 }
-                if(!fields.equals(state.path("fields")) || !sc.path("id").asText().equals(state.path("scenario").asText())) invalidate(state);
+                if(!sameFields(fields,state.path("fields")) || !sc.path("id").asText().equals(state.path("scenario").asText())) invalidate(state);
+                else break;
                 state.set("fields",fields); state.put("scenario",sc.path("id").asText()); break;
             }
             case "evidence": {
@@ -115,7 +127,8 @@ public class WorkflowService {
                     List<Map<String,Object>> rows=jdbc.queryForList("SELECT id,sku,name,summary,source,version FROM products WHERE tenant_id=? AND id=? AND review_status='verified'",ctx.getTenantId(),ref.asText());
                     if(rows.isEmpty()) fail("EVIDENCE_REQUIRED"); refs.add(json.valueToTree(rows.get(0)));
                 }
-                state.set("evidence",refs); invalidate(state); break;
+                if(!refs.equals(state.path("evidence"))){state.set("evidence",refs); invalidate(state);}
+                break;
             }
             case "draft": {
                 ObjectNode reply=json.createObjectNode(); reply.put("id",Ids.uuid()); reply.put("version",state.withArray("replies").size()+1);

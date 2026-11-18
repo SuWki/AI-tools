@@ -12,8 +12,9 @@ public class KnowledgeVersionService {
     private final JdbcTemplate jdbc;private final ObjectMapper json;private final AuditService audit;
     public KnowledgeVersionService(JdbcTemplate jdbc,ObjectMapper json,AuditService audit){this.jdbc=jdbc;this.json=json;this.audit=audit;}
     private Map<String,Object> product(SessionContext ctx,String id){List<Map<String,Object>> rows=jdbc.queryForList("SELECT * FROM products WHERE tenant_id=? AND id=?",ctx.getTenantId(),id);if(rows.isEmpty())throw ApiException.notFound("NOT_FOUND");return rows.get(0);}
-    public void snapshot(SessionContext ctx,String id){
-        Map<String,Object> p=product(ctx,id);try{jdbc.update("INSERT OR IGNORE INTO knowledge_versions(tenant_id,product_id,version,content,status,author_id,created_at) VALUES(?,?,?,?,?,?,?)",ctx.getTenantId(),id,p.get("version"),json.writeValueAsString(p),"verified".equals(p.get("review_status"))?"published":"draft",ctx.getUserId(),System.currentTimeMillis());}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);}
+    private void snapshot(SessionContext ctx,String id){snapshot(ctx,id,null);}
+    public void snapshot(SessionContext ctx,String id,String authorId){
+        Map<String,Object> p=product(ctx,id);try{jdbc.update("INSERT OR IGNORE INTO knowledge_versions(tenant_id,product_id,version,content,status,author_id,created_at) VALUES(?,?,?,?,?,?,?)",ctx.getTenantId(),id,p.get("version"),json.writeValueAsString(p),"verified".equals(p.get("review_status"))?"published":"draft",authorId,System.currentTimeMillis());}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);}
     }
     public List<Map<String,Object>> history(SessionContext ctx,String id){snapshot(ctx,id);return jdbc.queryForList("SELECT version,content,status,author_id AS authorId,created_at AS createdAt,reviewer_id AS reviewerId,reviewed_at AS reviewedAt FROM knowledge_versions WHERE tenant_id=? AND product_id=? ORDER BY version DESC",ctx.getTenantId(),id);}
     @Transactional public Map<String,Object> revise(SessionContext ctx,String id,JsonNode body){
@@ -29,11 +30,16 @@ public class KnowledgeVersionService {
     @Transactional public Map<String,Object> publish(SessionContext ctx,String id,int version){
         if(!ctx.canReviewKnowledge())throw ApiException.forbidden("REVIEW_AUTHORITY_REQUIRED");
         Map<String,Object> current=product(ctx,id);
-        List<Map<String,Object>> rows=jdbc.queryForList("SELECT * FROM knowledge_versions WHERE tenant_id=? AND product_id=? AND version=? AND status='pending'",ctx.getTenantId(),id,version);
-        if(rows.isEmpty()||version<=((Number)current.get("version")).intValue())throw ApiException.badRequest("INVALID_TRANSITION");
+        snapshot(ctx,id);
+        int currentVersion=((Number)current.get("version")).intValue();
+        boolean initial=version==currentVersion&&"unreviewed".equals(current.get("review_status"));
+        List<Map<String,Object>> rows=jdbc.queryForList(
+                "SELECT * FROM knowledge_versions WHERE tenant_id=? AND product_id=? AND version=? AND status=?",
+                ctx.getTenantId(),id,version,initial?"draft":"pending");
+        if(rows.isEmpty()||(!initial&&version<=currentVersion))throw ApiException.badRequest("INVALID_TRANSITION");
         Map<String,Object> draft=rows.get(0);if(ctx.getUserId().equals(draft.get("author_id")))throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN");
         try{JsonNode p=json.readTree(String.valueOf(draft.get("content")));long now=System.currentTimeMillis();
-            jdbc.update("UPDATE products SET name=?,summary=?,source=?,name_en=NULL,summary_en=NULL,version=?,review_status='verified',reviewer_id=?,updated_at=? WHERE tenant_id=? AND id=?",p.path("name").asText(),p.path("summary").asText(),p.path("source").asText(),version,ctx.getUserId(),now,ctx.getTenantId(),id);
+            jdbc.update("UPDATE products SET name=?,summary=?,source=?,name_en=?,summary_en=?,version=?,review_status='verified',reviewer_id=?,updated_at=? WHERE tenant_id=? AND id=?",p.path("name").asText(),p.path("summary").asText(),p.path("source").asText(),p.path("name_en").asText(null),p.path("summary_en").asText(null),version,ctx.getUserId(),now,ctx.getTenantId(),id);
             jdbc.update("UPDATE knowledge_versions SET status='superseded' WHERE tenant_id=? AND product_id=? AND status='published'",ctx.getTenantId(),id);
             jdbc.update("UPDATE knowledge_versions SET status='published',reviewer_id=?,reviewed_at=? WHERE tenant_id=? AND product_id=? AND version=?",ctx.getUserId(),now,ctx.getTenantId(),id,version);
         }catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);}

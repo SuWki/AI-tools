@@ -79,7 +79,7 @@ public class KnowledgeService {
                         "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 id, ctx.getTenantId(), sku, name, summary, source, "unreviewed", 1, now, now);
         audit.log(ctx, "knowledge_created", "product", id, sku);
-        versions.snapshot(ctx,id);
+        versions.snapshot(ctx,id,ctx.getUserId());
         return find(ctx, id);
     }
 
@@ -90,14 +90,7 @@ public class KnowledgeService {
         }
         Map<String,Object> current=find(ctx, productId);
         if(Boolean.TRUE.equals(current.get("verified"))) return current;
-        List<String> authors=jdbc.query("SELECT author_id FROM knowledge_versions WHERE tenant_id=? AND product_id=? AND version=?",(rs,i)->rs.getString(1),ctx.getTenantId(),productId,current.get("version"));
-        if(!authors.isEmpty() && ctx.getUserId().equals(authors.get(0))) throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN");
-        if("retired".equals(current.get("reviewStatus"))) throw ApiException.badRequest("INVALID_TRANSITION");
-        long now = System.currentTimeMillis();
-        jdbc.update("UPDATE products SET review_status='verified', reviewer_id=?, version=version+1, updated_at=? " +
-                "WHERE id=? AND tenant_id=?", ctx.getUserId(), now, productId, ctx.getTenantId());
-        audit.log(ctx, "knowledge_reviewed", "product", productId, "verified");
-        versions.snapshot(ctx,productId);
+        versions.publish(ctx, productId, ((Number) current.get("version")).intValue());
         return find(ctx, productId);
     }
 

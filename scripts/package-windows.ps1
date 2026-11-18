@@ -15,6 +15,11 @@ Copy-Item -LiteralPath $runtimeRoot -Destination (Join-Path $output 'runtime') -
 Copy-Item -LiteralPath (Join-Path $projectRoot 'backend\target\workhub-backend-3.2.0.jar') -Destination (Join-Path $output 'workhub.jar')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'start-local.ps1') -Destination $output
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'stop-local.ps1') -Destination $output
+$backupTools=New-Item -ItemType Directory -Path (Join-Path $output 'scripts')
+foreach($file in @('backup-data.ps1','restore-data.ps1')){
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $backupTools.FullName
+}
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/R1-2026-11-11.md') -Destination (Join-Path $output '备份恢复.md')
 Set-Content -LiteralPath (Join-Path $output '启动工作台.cmd') -Value '@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-local.ps1"' -Encoding ascii
 Set-Content -LiteralPath (Join-Path $output '停止工作台.cmd') -Value '@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop-local.ps1"' -Encoding ascii
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PROCUREMENT-README.md') -Destination (Join-Path $output '使用说明.md')

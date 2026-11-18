@@ -7,7 +7,7 @@ public class ProcurementController {
  @GetMapping("/procurement-metrics") public JsonNode metrics(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c){return service.metrics(c);}
  @PostMapping("/procurement") public JsonNode create(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@RequestBody JsonNode b){return service.create(c,b);}
  @GetMapping("/procurement/{id}") public JsonNode get(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@PathVariable String id){return service.get(c,id);}
- @PostMapping("/procurement/{id}") public JsonNode cmd(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@PathVariable String id,@RequestBody JsonNode b){return service.command(c,id,b);}
+ @PostMapping("/procurement/{id}") public JsonNode cmd(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@PathVariable String id,@RequestBody JsonNode b){return service.executeCommand(c,id,b);}
  @GetMapping("/procurement/{id}/comparison") public JsonNode compare(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@PathVariable String id){return service.compare(c,id);}
  @PostMapping("/procurement/{id}/sync") public JsonNode sync(@RequestAttribute(AuthInterceptor.ATTR)SessionContext c,@PathVariable String id){return service.sync(c,id);}
  @PostMapping("/procurement-relay/{id}") public JsonNode relay(@PathVariable String id,@RequestHeader("X-Relay-Key")String key,@RequestBody JsonNode b){service.relayAuth(key);return service.relay(id,b);}

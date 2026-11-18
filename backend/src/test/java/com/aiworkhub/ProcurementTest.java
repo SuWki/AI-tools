@@ -37,4 +37,57 @@ class ProcurementTest {
  @Test void pendingChangesBlockCompletionAndTerminalStatesFreezeCommands()throws Exception{for(boolean withdraw:new boolean[]{false,true}){String[] a=awarded();String id=a[0];JsonNode p=cmd(id,"{\"op\":\"change\",\"delta\":\"10\",\"reason\":\"More work\",\"cause\":\"Scope\"}");assertThrows(ApiException.class,()->cmd(id,"{\"op\":\"complete\"}"));String change=p.path("changes").get(0).path("id").asText();if(!withdraw)cmd(id,"{\"op\":\"approveChange\",\"changeId\":\""+change+"\",\"confirmation\":\"Both confirmed\"}");cmd(id,withdraw?"{\"op\":\"withdraw\",\"reason\":\"No capacity\"}":"{\"op\":\"complete\"}");String before=service.get(c,id).toString();for(String op:new String[]{"change","approveChange","withdraw","complete","offer"})assertThrows(ApiException.class,()->cmd(id,"{\"op\":\""+op+"\",\"changeId\":\""+change+"\"}"));assertEquals(before,service.get(c,id).toString());}}
  @Test void awardFreezesTargetsAndNewSupplierRepliesButKeepsReceipts()throws Exception{String[] a=awarded();String before=service.get(c,a[0]).toString();assertThrows(ApiException.class,()->cmd(a[0],"{\"op\":\"offer\"}"));assertThrows(ApiException.class,()->service.submit(a[0],a[1],b("{\"op\":\"respond\",\"requestId\":\"late\",\"decision\":\"reject\",\"note\":\"late\",\"offerId\":\""+a[2]+"\"}")));service.submit(a[0],a[1],b("{\"op\":\"respond\",\"requestId\":\"ok\"}"));assertEquals(before,service.get(c,a[0]).toString());}
  @Test void portalFreezeFlagBlocksLateResponses()throws Exception{String[] a=awarded();ObjectNode publication=((ObjectNode)service.get(c,a[0])).deepCopy();publication.put("publicationRevision",100);publication.put("responsesFrozen",true);service.relay("portal-"+a[0],publication);assertTrue(service.supplier("portal-"+a[0],a[1]).path("responsesFrozen").asBoolean());assertThrows(ApiException.class,()->service.submit("portal-"+a[0],a[1],b("{\"op\":\"respond\",\"requestId\":\"late\",\"decision\":\"accept\",\"offerId\":\""+a[2]+"\"}")));}
+
+ @Test void portalRejectsStaleAcceptanceAndRetriesLostConfirmation() throws Exception {
+   String id=create().path("id").asText(),token=invite(id,"A"),portalId="remote-"+id;
+   end(id);
+   JsonNode project=cmd(id,"{\"op\":\"offer\",\"amounts\":[\"100\",\"150\"],\"terms\":\"Whole\",\"replyDeadline\":"+(System.currentTimeMillis()+3600000)+"}");
+   String offer=project.path("offers").get(0).path("id").asText();
+   String supplier=project.path("invitations").get(0).path("id").asText();
+   java.util.concurrent.atomic.AtomicBoolean dropReply=new java.util.concurrent.atomic.AtomicBoolean();
+   com.sun.net.httpserver.HttpServer server=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1",0),0);
+   server.createContext("/api/procurement-relay/",exchange->{
+     try{
+       JsonNode publication=json.readTree(exchange.getRequestBody());
+       JsonNode result=service.relay(portalId,publication);
+       if(dropReply.getAndSet(false)){exchange.sendResponseHeaders(503,-1);return;}
+       byte[] response=json.writeValueAsBytes(result);
+       exchange.getResponseHeaders().set("Content-Type","application/json");
+       exchange.sendResponseHeaders(200,response.length);
+       exchange.getResponseBody().write(response);
+     }finally{exchange.close();}
+   });
+   server.start();
+   try{
+     ReflectionTestUtils.setField(service,"portalUrl","http://127.0.0.1:"+server.getAddress().getPort());
+     ReflectionTestUtils.setField(service,"relayKey","01234567890123456789012345678901");
+     service.sync(c,id);
+     ObjectNode response=json.createObjectNode().put("op","respond").put("offerId",offer).put("requestId","accept-1").put("decision","accept");
+     service.submit(portalId,token,response);
+     JsonNode synced=service.sync(c,id);
+     ObjectNode award=json.createObjectNode().put("op","award").put("supplierId",supplier).put("offerId",offer)
+         .put("reason","Confirmed").put("responseId",synced.path("responses").get(0).path("id").asText())
+         .put("revision",synced.path("revision").asInt());
+     service.submit(portalId,token,response.put("requestId","reject").put("decision","reject").put("note","No capacity"));
+     assertEquals("PORTAL_ACCEPTANCE_CHANGED",assertThrows(ApiException.class,()->service.executeCommand(c,id,award)).getMessage());
+     assertFalse(service.get(c,id).has("award"));
+     assertEquals("reject",service.get(c,id).path("responses").get(1).path("decision").asText());
+     service.submit(portalId,token,response.put("requestId","accept-2").put("decision","accept"));
+     synced=service.sync(c,id);
+     award.put("responseId",synced.path("responses").get(2).path("id").asText()).put("revision",synced.path("revision").asInt());
+     dropReply.set(true);
+     assertEquals("PORTAL_SYNC_FAILED",assertThrows(ApiException.class,()->service.executeCommand(c,id,award)).getMessage());
+     assertTrue(service.get(c,id).has("pendingAward"));
+     assertTrue(service.supplier(portalId,token).path("responsesFrozen").asBoolean());
+     assertThrows(ApiException.class,()->service.submit(portalId,token,response.put("requestId","late")));
+     JsonNode confirmed=service.executeCommand(c,id,award);
+     assertFalse(confirmed.has("pendingAward"));
+     assertEquals(award.path("responseId"),confirmed.path("award").path("responseId"));
+     assertEquals(confirmed,service.executeCommand(c,id,award));
+   }finally{
+     server.stop(0);
+     ReflectionTestUtils.setField(service,"portalUrl","");
+     ReflectionTestUtils.setField(service,"relayKey","");
+   }
+ }
 }
