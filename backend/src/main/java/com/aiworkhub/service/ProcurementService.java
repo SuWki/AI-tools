@@ -18,7 +18,8 @@ public class ProcurementService {
  @org.springframework.beans.factory.annotation.Value("${procurement.portal-url:}") private String portalUrl;
  @org.springframework.beans.factory.annotation.Value("${procurement.relay-key:}") private String relayKey;
  private final JdbcTemplate db; private final ObjectMapper json;
- public ProcurementService(JdbcTemplate db,ObjectMapper json){this.db=db;this.json=json;}
+ private final org.springframework.transaction.support.TransactionTemplate tx;
+ public ProcurementService(JdbcTemplate db,ObjectMapper json,org.springframework.transaction.PlatformTransactionManager manager){this.db=db;this.json=json;this.tx=new org.springframework.transaction.support.TransactionTemplate(manager);}
  private void require(boolean ok,String code){if(!ok)throw ApiException.badRequest(code);}
  private String text(JsonNode b,String k){String s=b.path(k).asText("").trim();require(!s.isEmpty()&&s.length()<4000,"INVALID_"+k.toUpperCase());return s;}
  private String hash(String s){try{byte[] bytes=MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));StringBuilder out=new StringBuilder();for(byte v:bytes)out.append(String.format("%02x",v));return out.toString();}catch(Exception e){throw new IllegalStateException(e);}}
@@ -48,28 +49,163 @@ public class ProcurementService {
  public void relayAuth(String key){if(relayKey==null||relayKey.length()<32||!MessageDigest.isEqual(relayKey.getBytes(StandardCharsets.UTF_8),key.getBytes(StandardCharsets.UTF_8)))throw ApiException.forbidden("RELAY_DISABLED_OR_UNAUTHORISED");}
  @Transactional public JsonNode relay(String id,JsonNode publication){
    ObjectNode p;boolean fresh=db.queryForObject("SELECT COUNT(*) FROM procurement_projects WHERE id=?",Integer.class,id)==0;
-   if(fresh){p=json.createObjectNode().put("id",id).put("tenantId","relay").put("revision",0);for(String k:Arrays.asList("quotes","responses","events","changes"))p.putArray(k);}else p=read(id);
+   if(fresh){p=json.createObjectNode().put("id",id).put("tenantId","relay").put("revision",0);for(String k:Arrays.asList("quotes","responses","events","changes"))p.putArray(k);}else {p=read(id);require("relay".equals(p.path("tenantId").asText()),"PROJECT_NOT_FOUND");}
    int revision=p.path("revision").asInt();require(fresh||publication.path("publicationRevision").asInt(-1)>=p.path("sourceRevision").asInt(-1),"STALE_PUBLICATION");p.put("sourceRevision",publication.path("publicationRevision").asInt());for(String k:Arrays.asList("title","route","cargo","terms","currency","deadline","status","items","invitations","offers"))p.set(k,publication.path(k));
-   p.put("responsesFrozen",publication.path("responsesFrozen").asBoolean());
+   p.put("responsesFrozen",p.path("responsesFrozen").asBoolean()||publication.path("responsesFrozen").asBoolean());
+   JsonNode awardRequest=publication.path("awardRequest");
+   boolean confirmed=false;
+   if(awardRequest.isObject()){
+     String requestId=text(awardRequest,"requestId");
+     confirmed=requestId.equals(p.path("confirmedAwardRequest").asText());
+     if(!confirmed&&!p.path("responsesFrozen").asBoolean()&&matchesAcceptance(p,awardRequest)){
+       p.put("confirmedAwardRequest",requestId);
+       p.put("responsesFrozen",true);
+       confirmed=true;
+     }
+   }
    if(fresh){try{db.update("INSERT INTO procurement_projects(id,tenant_id,revision,content) VALUES(?,'relay',0,?)",id,json.writeValueAsString(p));}catch(Exception e){throw new IllegalStateException(e);}}else save(p,revision);
-   ObjectNode result=json.createObjectNode();result.set("quotes",p.path("quotes"));result.set("responses",p.path("responses"));result.put("portalRevision",p.path("revision").asInt());return result;
+   ObjectNode result=json.createObjectNode();result.set("quotes",p.path("quotes"));result.set("responses",p.path("responses"));result.put("portalRevision",p.path("revision").asInt());
+   if(awardRequest.isObject())result.put("awardConfirmed",confirmed);
+   return result;
  }
- @Transactional public JsonNode sync(SessionContext c,String id){permission(c);require(portalUrl!=null&&!portalUrl.isEmpty()&&relayKey!=null&&relayKey.length()>=32,"PORTAL_NOT_CONFIGURED");require(portalUrl.startsWith("https://")||portalUrl.startsWith("http://127.0.0.1:"),"HTTPS_REQUIRED");ObjectNode p=own(c,id),publication=json.createObjectNode();int old=p.path("revision").asInt();publication.put("publicationRevision",old);for(String k:Arrays.asList("title","route","cargo","terms","currency","deadline","status","items","invitations","offers"))publication.set(k,p.path(k));publication.put("responsesFrozen",p.has("award"));
-   org.springframework.http.HttpHeaders headers=new org.springframework.http.HttpHeaders();headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);headers.set("X-Relay-Key",relayKey);
-   org.springframework.http.client.SimpleClientHttpRequestFactory factory=new org.springframework.http.client.SimpleClientHttpRequestFactory();factory.setConnectTimeout(5000);factory.setReadTimeout(15000);
-   JsonNode receipt=new org.springframework.web.client.RestTemplate(factory).postForObject(portalUrl+"/api/procurement-relay/"+id,new org.springframework.http.HttpEntity<>(publication,headers),JsonNode.class);
-   require(receipt!=null&&receipt.path("quotes").isArray()&&receipt.path("responses").isArray(),"INVALID_RECEIPT");if(!p.has("award")){p.set("quotes",receipt.path("quotes"));p.set("responses",receipt.path("responses"));}p.put("syncedAt",System.currentTimeMillis());p.put("remoteComplete",p.path("status").asText().equals("closed"));event(p,"sync",c.getDisplayName(),"portal revision "+receipt.path("portalRevision").asInt());save(p,old);return p;
+ @Transactional private boolean portalConfigured(){return portalUrl!=null&&!portalUrl.trim().isEmpty();}
+
+ private ObjectNode publication(ObjectNode project){
+   ObjectNode payload=json.createObjectNode().put("publicationRevision",project.path("revision").asInt());
+   for(String field:Arrays.asList("title","route","cargo","terms","currency","deadline","status","items","invitations","offers")){
+     payload.set(field,project.path(field));
+   }
+   return payload.put("responsesFrozen",project.has("award"));
+ }
+
+ private JsonNode exchange(String id,ObjectNode payload){
+   require(portalConfigured()&&relayKey!=null&&relayKey.length()>=32,"PORTAL_NOT_CONFIGURED");
+   require(portalUrl.startsWith("https://")||portalUrl.startsWith("http://127.0.0.1:"),"HTTPS_REQUIRED");
+   org.springframework.http.HttpHeaders headers=new org.springframework.http.HttpHeaders();
+   headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+   headers.set("X-Relay-Key",relayKey);
+   org.springframework.http.client.SimpleClientHttpRequestFactory factory=new org.springframework.http.client.SimpleClientHttpRequestFactory();
+   factory.setConnectTimeout(5000);
+   factory.setReadTimeout(15000);
+   JsonNode receipt;
+   try{
+     receipt=new org.springframework.web.client.RestTemplate(factory).postForObject(portalUrl+"/api/procurement-relay/"+id,new org.springframework.http.HttpEntity<>(payload,headers),JsonNode.class);
+   }catch(org.springframework.web.client.RestClientException ex){
+     throw new ApiException(HttpStatus.BAD_GATEWAY,"PORTAL_SYNC_FAILED");
+   }
+   require(receipt!=null&&receipt.path("quotes").isArray()&&receipt.path("responses").isArray(),"INVALID_RECEIPT");
+   return receipt;
+ }
+
+ private void importReceipt(ObjectNode project,JsonNode receipt){
+   if(!project.has("award")){
+     project.set("quotes",receipt.path("quotes"));
+     project.set("responses",receipt.path("responses"));
+   }
+   project.put("syncedAt",System.currentTimeMillis());
+   project.put("remoteComplete",project.path("status").asText().equals("closed"));
+ }
+
+ public JsonNode sync(SessionContext c,String id){
+   permission(c);
+   ObjectNode snapshot=own(c,id);
+   require(!snapshot.has("pendingAward"),"AWARD_CONFIRMATION_PENDING");
+   int revision=snapshot.path("revision").asInt();
+   JsonNode receipt=exchange(id,publication(snapshot));
+   return tx.execute(status->{
+     ObjectNode current=own(c,id);
+     require(current.path("revision").asInt()==revision,"REVISION_CONFLICT");
+     importReceipt(current,receipt);
+     event(current,"sync",c.getDisplayName(),"portal revision "+receipt.path("portalRevision").asInt());
+     save(current,revision);
+     return current;
+   });
+ }
+
+ private JsonNode latestResponse(JsonNode project,String supplierId,String offerId){
+   JsonNode latest=com.fasterxml.jackson.databind.node.MissingNode.getInstance();
+   for(JsonNode response:project.path("responses")){
+     if(supplierId.equals(response.path("supplierId").asText())&&offerId.equals(response.path("offerId").asText()))latest=response;
+   }
+   return latest;
+ }
+
+ private boolean matchesAcceptance(JsonNode project,JsonNode candidate){
+   JsonNode offers=project.path("offers");
+   if(offers.isEmpty()||!offers.get(offers.size()-1).path("id").asText().equals(candidate.path("offerId").asText()))return false;
+   JsonNode response=latestResponse(project,candidate.path("supplierId").asText(),candidate.path("offerId").asText());
+   return response.path("decision").asText().equals("accept")
+       &&response.path("id").asText().equals(candidate.path("responseId").asText());
+ }
+
+ public JsonNode executeCommand(SessionContext c,String id,JsonNode body){
+   if(!"award".equals(body.path("op").asText())||!portalConfigured())return tx.execute(status->command(c,id,body));
+   permission(c);
+   ObjectNode snapshot=tx.execute(status->{
+     ObjectNode project=own(c,id);
+     if(sameAward(project.path("award"),body))return project;
+     require(!project.has("award"),"ALREADY_AWARDED");
+     if(project.has("pendingAward")){
+       require(sameAward(project.path("pendingAward"),body),"AWARD_CONFIRMATION_PENDING");
+       return project;
+     }
+     int revision=project.path("revision").asInt();
+     require(body.path("revision").asInt(-1)==revision,"REVISION_CONFLICT");
+     require(matchesAcceptance(project,body),"SUPPLIER_ACCEPTANCE_REQUIRED");
+     project.putObject("pendingAward").put("requestId",UUID.randomUUID().toString())
+         .put("supplierId",text(body,"supplierId")).put("offerId",text(body,"offerId"))
+         .put("responseId",text(body,"responseId")).put("reason",text(body,"reason"));
+     save(project,revision);
+     return project;
+   });
+   if(snapshot.has("award"))return snapshot;
+   JsonNode pending=snapshot.path("pendingAward");
+   ObjectNode payload=publication(snapshot);
+   ObjectNode candidate=json.createObjectNode();
+   for(String field:Arrays.asList("requestId","supplierId","offerId","responseId"))candidate.set(field,pending.get(field));
+   payload.set("awardRequest",candidate);
+   JsonNode receipt=exchange(id,payload);
+   require(receipt.path("awardConfirmed").isBoolean(),"PORTAL_UPGRADE_REQUIRED");
+   boolean confirmed=receipt.path("awardConfirmed").asBoolean();
+   ObjectNode result=tx.execute(status->{
+     ObjectNode project=own(c,id);
+     if(sameAward(project.path("award"),body))return project;
+     require(project.path("pendingAward").equals(pending),"REVISION_CONFLICT");
+     int revision=project.path("revision").asInt();
+     importReceipt(project,receipt);
+     if(confirmed){
+       require(matchesAcceptance(project,pending),"INVALID_RECEIPT");
+       ObjectNode award=((ObjectNode)pending).deepCopy();
+       award.remove("requestId");
+       award.put("at",System.currentTimeMillis());
+       project.set("award",award);
+       event(project,"award",c.getDisplayName(),award.path("reason").asText());
+     }
+     project.remove("pendingAward");
+     save(project,revision);
+     return project;
+   });
+   require(confirmed,"PORTAL_ACCEPTANCE_CHANGED");
+   return result;
+ }
+
+ private boolean sameAward(JsonNode award,JsonNode candidate){
+   return award.isObject()&&award.path("supplierId").equals(candidate.path("supplierId"))
+       &&award.path("offerId").equals(candidate.path("offerId"))
+       &&award.path("responseId").equals(candidate.path("responseId"));
  }
  @Transactional public JsonNode create(SessionContext c,JsonNode b){permission(c);ObjectNode p=json.createObjectNode();p.put("id",UUID.randomUUID().toString());p.put("tenantId",c.getTenantId());p.put("title",text(b,"title"));p.put("route",text(b,"route"));p.put("cargo",text(b,"cargo"));p.put("terms",text(b,"terms"));p.put("currency",text(b,"currency"));require(b.path("deadline").asLong()>System.currentTimeMillis(),"INVALID_DEADLINE");p.put("deadline",b.path("deadline").asLong());
  require(b.path("items").isArray()&&b.path("items").size()>0&&b.path("items").size()<=30,"INVALID_ITEMS");ArrayNode items=p.putArray("items");for(JsonNode item:b.path("items"))items.addObject().put("id","fee-"+(items.size()+1)).put("name",text(item,"name"));p.put("status","published");p.put("revision",0);for(String key:Arrays.asList("invitations","quotes","offers","responses","events","changes"))p.putArray(key);event(p,"published",c.getDisplayName(),"Frozen scope and fee items");try{db.update("INSERT INTO procurement_projects(id,tenant_id,revision,content) VALUES(?,?,0,?)",p.path("id").asText(),c.getTenantId(),json.writeValueAsString(p));}catch(Exception e){throw new IllegalStateException(e);}return p;}
  @Transactional public JsonNode command(SessionContext c,String id,JsonNode b){permission(c);ObjectNode p=own(c,id);int old=p.path("revision").asInt();require(b.path("revision").asInt(-1)==old,"REVISION_CONFLICT");String op=text(b,"op"),token=null;
+ require(!p.has("pendingAward"),"AWARD_CONFIRMATION_PENDING");
+ if("award".equals(op))require(!portalConfigured(),"PORTAL_CONFIRMATION_REQUIRED");
  if(Arrays.asList("change","approveChange","withdraw","complete").contains(op))require(p.has("award")&&!p.has("withdrawal")&&!p.has("completedAt"),"INVALID_TRANSITION");
  if(Arrays.asList("invite","close","offer","award").contains(op))require(!p.has("award"),"ALREADY_AWARDED");
  switch(op){
  case "invite":require(p.path("status").asText().equals("published")&&System.currentTimeMillis()<p.path("deadline").asLong(),"ROUND_CLOSED");token=UUID.randomUUID().toString()+UUID.randomUUID();p.withArray("invitations").addObject().put("id",UUID.randomUUID().toString()).put("name",text(b,"name")).put("tokenHash",hash(token));break;
  case "close":require(System.currentTimeMillis()>=p.path("deadline").asLong(),"BEFORE_DEADLINE");p.put("status","closed");break;
  case "offer":require(p.path("status").asText().equals("closed"),"CLOSE_ROUND_FIRST");ArrayNode prices=prices(p,b.path("amounts"));require(b.path("replyDeadline").asLong()>System.currentTimeMillis(),"INVALID_DEADLINE");p.withArray("offers").addObject().put("id",UUID.randomUUID().toString()).put("terms",text(b,"terms")).put("replyDeadline",b.path("replyDeadline").asLong()).set("amounts",prices);break;
- case "award":{String supplier=text(b,"supplierId");require(p.withArray("offers").size()>0&&p.withArray("offers").get(p.withArray("offers").size()-1).path("id").asText().equals(text(b,"offerId")),"OFFER_SUPERSEDED");JsonNode accepted=null;for(JsonNode r:p.withArray("responses"))if(r.path("supplierId").asText().equals(supplier)&&r.path("offerId").asText().equals(text(b,"offerId")))accepted=r;require(accepted!=null&&accepted.path("decision").asText().equals("accept"),"SUPPLIER_ACCEPTANCE_REQUIRED");require(!p.has("award"),"ALREADY_AWARDED");p.putObject("award").put("supplierId",supplier).put("offerId",text(b,"offerId")).put("reason",text(b,"reason")).put("at",System.currentTimeMillis());break;}
+ case "award":{String supplier=text(b,"supplierId");require(p.withArray("offers").size()>0&&p.withArray("offers").get(p.withArray("offers").size()-1).path("id").asText().equals(text(b,"offerId")),"OFFER_SUPERSEDED");JsonNode accepted=null;for(JsonNode r:p.withArray("responses"))if(r.path("supplierId").asText().equals(supplier)&&r.path("offerId").asText().equals(text(b,"offerId")))accepted=r;require(accepted!=null&&accepted.path("decision").asText().equals("accept")&&(!b.has("responseId")||accepted.path("id").equals(b.path("responseId"))),"SUPPLIER_ACCEPTANCE_REQUIRED");require(!p.has("award"),"ALREADY_AWARDED");p.putObject("award").put("supplierId",supplier).put("offerId",text(b,"offerId")).put("reason",text(b,"reason")).put("at",System.currentTimeMillis());break;}
  case "complete":require(p.has("award")&&!p.has("withdrawal")&&!p.has("completedAt"),"INVALID_TRANSITION");for(JsonNode change:p.path("changes"))require(!change.path("status").asText().equals("proposed"),"PENDING_CHANGES");p.put("completedAt",System.currentTimeMillis());break;
  case "withdraw":require(p.has("award")&&!p.has("withdrawal"),"INVALID_TRANSITION");p.putObject("withdrawal").put("reason",text(b,"reason")).put("at",System.currentTimeMillis());break;
  case "change":{require(p.has("award"),"AWARD_REQUIRED");BigDecimal delta=money(b.path("delta"),true);p.withArray("changes").addObject().put("id",UUID.randomUUID().toString()).put("delta",delta.toPlainString()).put("reason",text(b,"reason")).put("cause",text(b,"cause")).put("status","proposed");break;}
@@ -83,7 +219,7 @@ public class ProcurementService {
  @Transactional public JsonNode submit(String id,String token,JsonNode b){ObjectNode p=read(id);JsonNode i=invite(p,token);String requestId=text(b,"requestId");for(String key:Arrays.asList("quotes","responses"))for(JsonNode n:p.withArray(key))if(requestId.equals(n.path("requestId").asText())&&i.path("id").asText().equals(n.path("supplierId").asText()))return supplier(id,token);
  String op=text(b,"op");ObjectNode record=json.createObjectNode().put("id",UUID.randomUUID().toString()).put("supplierId",i.path("id").asText()).put("requestId",requestId).put("at",System.currentTimeMillis());
  if(op.equals("quote")){require(p.path("status").asText().equals("published")&&System.currentTimeMillis()<=p.path("deadline").asLong(),"ROUND_CLOSED");record.set("amounts",prices(p,b.path("amounts")));record.put("conditions",b.path("conditions").asText(""));p.withArray("quotes").add(record);}
- else if(op.equals("respond")){require(!p.has("award")&&!p.path("responsesFrozen").asBoolean(),"ALREADY_AWARDED");JsonNode offer=null;for(JsonNode o:p.withArray("offers"))if(o.path("id").asText().equals(text(b,"offerId")))offer=o;require(offer!=null&&offer==p.withArray("offers").get(p.withArray("offers").size()-1),"OFFER_SUPERSEDED");require(System.currentTimeMillis()<=offer.path("replyDeadline").asLong(),"OFFER_EXPIRED");String decision=text(b,"decision");require(Arrays.asList("accept","reject","conditional").contains(decision),"INVALID_DECISION");if(!decision.equals("accept"))text(b,"note");record.put("offerId",offer.path("id").asText()).put("decision",decision).put("note",b.path("note").asText(""));p.withArray("responses").add(record);}
+ else if(op.equals("respond")){require(!p.has("award")&&!p.has("pendingAward")&&!p.path("responsesFrozen").asBoolean(),"ALREADY_AWARDED");JsonNode offer=null;for(JsonNode o:p.withArray("offers"))if(o.path("id").asText().equals(text(b,"offerId")))offer=o;require(offer!=null&&offer==p.withArray("offers").get(p.withArray("offers").size()-1),"OFFER_SUPERSEDED");require(System.currentTimeMillis()<=offer.path("replyDeadline").asLong(),"OFFER_EXPIRED");String decision=text(b,"decision");require(Arrays.asList("accept","reject","conditional").contains(decision),"INVALID_DECISION");if(!decision.equals("accept"))text(b,"note");record.put("offerId",offer.path("id").asText()).put("decision",decision).put("note",b.path("note").asText(""));p.withArray("responses").add(record);}
  else throw ApiException.badRequest("UNKNOWN_COMMAND");event(p,op,i.path("name").asText(),record.path("id").asText());save(p,p.path("revision").asInt());return supplier(id,token);}
  public JsonNode compare(SessionContext c,String id){permission(c);ObjectNode p=own(c,id);require(portalUrl==null||portalUrl.isEmpty()||p.path("remoteComplete").asBoolean(),"SYNC_CLOSED_ROUND_FIRST");require(p.path("status").asText().equals("closed"),"CLOSE_ROUND_FIRST");Map<String,JsonNode> latest=new LinkedHashMap<>();for(JsonNode q:p.withArray("quotes"))latest.put(q.path("supplierId").asText(),q);ObjectNode out=json.createObjectNode();ArrayNode mins=out.putArray("minimums");BigDecimal reference=BigDecimal.ZERO,best=null;String bestId="";List<JsonNode> comparable=new ArrayList<>();for(JsonNode q:latest.values())if(q.path("conditions").asText().trim().isEmpty())comparable.add(q);require(!comparable.isEmpty(),"NO_COMPARABLE_QUOTES");for(int x=0;x<p.withArray("items").size();x++){BigDecimal min=null;String source="";for(JsonNode q:comparable){BigDecimal v=money(q.path("amounts").get(x),false);if(min==null||v.compareTo(min)<0){min=v;source=q.path("supplierId").asText();}}mins.addObject().put("amount",min.toPlainString()).put("supplierId",source);reference=reference.add(min);}for(JsonNode q:comparable){BigDecimal total=BigDecimal.ZERO;for(JsonNode v:q.path("amounts"))total=total.add(money(v,false));if(best==null||total.compareTo(best)<0){best=total;bestId=q.path("supplierId").asText();}}out.put("referenceTotal",reference.toPlainString()).put("bestWholeTotal",best.toPlainString()).put("bestSupplierId",bestId).put("excludedConditionalQuotes",latest.size()-comparable.size()).put("executable",false);return out;}
 }

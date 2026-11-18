@@ -64,9 +64,13 @@ class WorkflowIntegrationTest {
         call("GET","/api/cases/"+id,reviewer,null,200);
         cmd(admin,id,4,"{\"op\":\"approve\",\"id\":\""+reply+"\"}",403);
         s=cmd(reviewer,id,4,"{\"op\":\"approve\",\"id\":\""+reply+"\",\"note\":\"Checked\"}",200);assertEquals("approved",s.path("replies").get(0).path("status").asText());
-        s=cmd(sales,id,5,b.toString(),200);assertEquals("stale",s.path("replies").get(0).path("status").asText());
-        cmd(sales,id,6,"{\"op\":\"copy\",\"id\":\""+reply+"\"}",400);
-        cmd(sales,id,6,"{\"op\":\"submit\",\"id\":\""+reply+"\",\"reviewerId\":\"U-REVIEWER-C\"}",400);
+        s=cmd(sales,id,5,b.toString(),200);assertEquals("approved",s.path("replies").get(0).path("status").asText());
+        s=cmd(sales,id,6,"{\"op\":\"evidence\",\"ids\":[\""+doc+"\"]}",200);
+        assertEquals("approved",s.path("replies").get(0).path("status").asText());
+        ((ObjectNode)fields.path("pressure")).put("value","different confirmed pressure");
+        s=cmd(sales,id,7,b.toString(),200);assertEquals("stale",s.path("replies").get(0).path("status").asText());
+        cmd(sales,id,8,"{\"op\":\"copy\",\"id\":\""+reply+"\"}",400);
+        cmd(sales,id,8,"{\"op\":\"submit\",\"id\":\""+reply+"\",\"reviewerId\":\"U-REVIEWER-C\"}",400);
     }
     @Test void revisionConflictDoesNotOverwriteState()throws Exception{
         String token=login("admin@workhub.demo"),id=create(token);
@@ -110,6 +114,18 @@ class WorkflowIntegrationTest {
         call("POST","/api/knowledge/"+doc+"/versions/"+next.path("version").asInt()+"/publish",sales,null,403);
         call("POST","/api/knowledge/"+doc+"/versions/"+next.path("version").asInt()+"/publish",reviewer,null,200);
         assertEquals("EVIDENCE_CHANGED",cmd(sales,id,3,"{\"op\":\"copy\",\"id\":\""+reply+"\"}",400).path("error").asText());
-        assertTrue(call("GET","/api/knowledge/"+doc+"/versions",sales,null,200).size()>=3);
+        assertTrue(call("GET","/api/knowledge/"+doc+"/versions",sales,null,200).size()>=2);
+    }
+    @Test void initialReviewPreservesPendingRevision()throws Exception{
+        String sales=login("sales@compressor.demo"), reviewer=login("reviewer@compressor.demo");
+        String id=call("POST","/api/knowledge",sales,"{\"name\":\"Original\",\"sku\":\"COLLISION\",\"summary\":\"V1 text\",\"source\":\"Catalogue\"}",200).path("id").asText();
+        String path="/api/knowledge/"+id;
+        JsonNode next=call("POST",path+"/versions",sales,"{\"version\":1,\"name\":\"Revised\",\"summary\":\"V2 text\",\"source\":\"Catalogue\"}",200);
+        JsonNode first=call("PATCH",path+"/review",reviewer,null,200);
+        assertEquals(1,first.path("version").asInt());
+        assertEquals("V1 text",first.path("summary").asText());
+        JsonNode published=call("POST",path+"/versions/"+next.path("version").asInt()+"/publish",reviewer,null,200);
+        assertEquals("V2 text",published.path("summary").asText());
+        assertEquals("published",call("GET",path+"/versions",sales,null,200).get(0).path("status").asText());
     }
 }
