@@ -8,6 +8,16 @@
   --radius: 6px;
   --shadow: none;
 }
+.fee-entry input[aria-invalid="true"] { border-color: #9d3d31; }
+.fee-error { margin: 4px 10px 8px; color: #843629; font-size: 13px; }
+.fee-navigation { display: none; }
+.supplier-receipt { overflow-wrap: anywhere; }
+@media(max-width:760px) {
+  .fee-entry:focus-within { background: #f3f6f8; }
+  .fee-navigation { display: flex; justify-content: flex-end; gap: 8px; padding: 4px 0 8px; }
+  .fee-navigation .btn { min-height: 44px; }
+  .fee-entry .fee-error { margin-inline: 0; }
+}
 .standalone-procurement, .supplier-portal { --ink:#202e3a; --teal:#284e6b; --line:#d7dde0; color:var(--ink); }
 .project-overview h2, .project-overview p { margin: 4px 0; }
 .quote-inbox-row { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; padding:10px 0; border-bottom:1px solid var(--line); }

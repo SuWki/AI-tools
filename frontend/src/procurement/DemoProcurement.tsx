@@ -1,7 +1,7 @@
 import SupplierInsights from './SupplierInsights';
 import {demoSuppliers} from './supplierData';
 import ProcurementDashboard,{demoRecord} from './ProcurementDashboard';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Action,comparison,DemoState,metrics,money,cents,reduce,seed,total} from './demoModel';
 import ProcurementNav from './ProcurementNav';
 import FeeEditor from './FeeEditor';
@@ -11,6 +11,7 @@ export default function DemoProcurement({tenantId='public-demo'}:{tenantId?:stri
  const params=new URLSearchParams(location.search),scope=params.get('demoTenant')||tenantId,key=`workhub.procurement.preview.v1:${scope}`;
  const read=()=>{try{const s=JSON.parse(localStorage.getItem(key)||'null');return s?.version===1&&Array.isArray(s.suppliers)&&Array.isArray(s.events)?s as DemoState:seed();}catch{return seed();}};
  const [s,setS]=useState<DemoState>(read),[role,setRole]=useState(params.get('demoSupplier')||'buyer'),[message,setMessage]=useState(''),[tab,setTab]=useState(()=>stageTab(s) as string);
+ const quoteConditions=useRef<HTMLTextAreaElement>(null);
  const [editingQuote,setEditingQuote]=useState(false);
  const [form,setForm]=useState(()=>({title:s.title,route:s.route,cargo:s.cargo,terms:s.terms,deadline:s.deadline,fees:s.fees.join('\n')}));
  const [values,setValues]=useState<string[]>(()=>s.fees.map(()=>'')),[quoteNote,setQuoteNote]=useState(''),[target,setTarget]=useState<string[]>(()=>s.offers.length?s.offers[s.offers.length-1].amounts:[]),[targetTerms,setTargetTerms]=useState(()=>s.offers.length?s.offers[s.offers.length-1].terms:s.terms),[responseNote,setResponseNote]=useState(''),[withdrawQuoteReason,setWithdrawQuoteReason]=useState(''),[delta,setDelta]=useState('150.00'),[reason,setReason]=useState('客户要求增加一次装卸，双方另行核实。'),[confirmation,setConfirmation]=useState('模拟双方已确认费用变化及服务范围。');
@@ -73,8 +74,9 @@ export default function DemoProcurement({tenantId='public-demo'}:{tenantId?:stri
       <button className="btn" onClick={()=>saveQuote(s.fees.map((_,i)=>person.sample[i]??'0'),'')}>填入样例金额</button>
       <QuoteAssist fees={s.fees} disabled={false} apply={v=>saveQuote(v,quoteNote)}/>
       <form onSubmit={e=>{e.preventDefault();if(act({type:'quote',supplierId:person.id,amounts:values,note:quoteNote},'报价已提交，可在本家回执中查看。')){setEditingQuote(false);window.scrollTo(0,0);}}}>
-      <FeeEditor fees={s.fees} amounts={values} onChange={v=>saveQuote(v,quoteNote)}/>
-      <label className="field">附加条件（选填）<textarea value={quoteNote} onChange={e=>saveQuote(values,e.target.value)}/></label>
+      <FeeEditor fees={s.fees} amounts={values} onChange={v=>saveQuote(v,quoteNote)}
+        onFinishFees={()=>quoteConditions.current?.focus()}/>
+      <label className="field">附加条件（选填）<textarea ref={quoteConditions} value={quoteNote} onChange={e=>saveQuote(values,e.target.value)}/></label>
       <button className="btn primary">提交本家报价</button></form></section>}
     {person.quotes.length>0&&<section className="panel"><h2>本家报价回执</h2>{s.phase==='quoting'&&!person.quoteWithdrawal&&!editingQuote&&<button className="btn" onClick={()=>setEditingQuote(true)}>修订报价</button>}{[...person.quotes].reverse().map(q=><details key={q.id}><summary>{q.id} · ¥{total(q.amounts)} · {new Date(q.at).toLocaleString()}</summary><dl className="supplier-fees">{s.fees.map((f,i)=><div key={i}><dt>{f}</dt><dd>{q.amounts[i]}</dd></div>)}</dl><p>{q.note||'无附加条件'}</p></details>)}
       {person.quoteWithdrawal?<p>报价已撤回 · {person.quoteWithdrawal.reason}</p>:!s.award&&<details><summary>撤回本轮报价</summary><label className="field">撤回原因<textarea value={withdrawQuoteReason} onChange={e=>setWithdrawQuoteReason(e.target.value)}/></label>
