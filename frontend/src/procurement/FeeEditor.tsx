@@ -44,9 +44,7 @@ export default function FeeEditor({fees, amounts, onChange, disabled, currency='
   if (filled === fees.length) {
     try { sum = total(values); } catch { sum = '请检查金额'; }
   }
-  return <div className="fee-sheet" onBlur={event=>{
-    if(!event.currentTarget.contains(event.relatedTarget))setActive(-1);
-  }}>
+  return <div className="fee-sheet">
     <div className="fee-heading"><strong>费用科目</strong><span>整单金额 · {currency}</span></div>
     {fees.map((name, i) => {
       const issue = guided && checked.includes(i) ? amountIssue(values[i]) : '';
