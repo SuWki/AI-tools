@@ -34,6 +34,8 @@ export default function SupplierPortal() {
   const [busy,setBusy] = useState(false), [editing,setEditing] = useState(false);
   const [loadFailed,setLoadFailed]=useState(false),[attempt,setAttempt]=useState(0);
   const receipt=useRef<HTMLParagraphElement>(null);
+  const quoteConditions=useRef<HTMLTextAreaElement>(null);
+  const [quoteError,setQuoteError]=useState('');
   const [now,setNow] = useState(Date.now);
   const pending = useRef<{body:string; requestId:string}>();
   useEffect(() => {
@@ -49,17 +51,29 @@ export default function SupplierPortal() {
     return () => { active=false; window.clearInterval(clock); };
   }, [id,attempt]);
 
-  async function send(input:object) {
+  async function send(input:{op:string;[key:string]:unknown}) {
     if (busy) return;
-    setBusy(true);
+    setBusy(true);setMessage('');setQuoteError('');
     const body = JSON.stringify(input);
     try {
       if (pending.current?.body !== body) pending.current = {body,requestId:crypto.randomUUID()};
-      setProject(await supplierCall(id,{...input,requestId:pending.current.requestId}));
+      const updated = await supplierCall(id,{...input,requestId:pending.current.requestId});
+      setProject(updated);
       pending.current=undefined;
       setEditing(false); setReply(''); setReason('');
-      setMessage('已收到回执，采购方同步后可查看。');
-    } catch (e) { setMessage(String(e)); }
+      const latestQuote = updated.quotes[updated.quotes.length-1];
+      setMessage(input.op==='quote' && latestQuote
+        ? '已收到回执 · 第 '+updated.quotes.length+' 版 · '+updated.currency+' '+total(latestQuote.amounts)+' · 编号 '+latestQuote.id
+        : '已收到回执，采购方同步后可查看。');
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      const detail = code==='ROUND_CLOSED'?'报价窗口已截止，请联系采购方。':
+        ['INVALID_AMOUNT','ALL_FEES_REQUIRED'].includes(code)?'请逐项核对金额，无费用填 0。':
+        code==='QUOTE_WITHDRAWN'?'本轮报价已撤回。':'暂未收到提交回执。请检查网络后重试，已填内容仍在表单中。';
+      if (input.op==='quote') setQuoteError(detail);
+      else setMessage(code==='OFFER_EXPIRED'?'本版目标价回复已截止。':
+        code==='OFFER_SUPERSEDED'?'采购方已发布新版目标价，请重新打开邀请核对。':detail);
+    }
     finally { setBusy(false); }
   }
   useEffect(()=>{if(message)receipt.current?.focus();},[message]);
@@ -87,10 +101,14 @@ export default function SupplierPortal() {
     {canQuote && (!last || editing) ? <section className="panel"><h2>{last?'修订本家报价':'填写报价'}</h2>
       <QuoteAssist fees={fees} apply={setValues} disabled={busy}/>
       <form onSubmit={e=>{e.preventDefault();send({op:'quote',amounts:values,conditions});}}>
-        <FeeEditor fees={fees} amounts={values} onChange={setValues} disabled={busy} currency={p.currency}/>
-        <label className="field">附加条件（选填）<textarea value={conditions} disabled={busy} onChange={e=>setConditions(e.target.value)}/></label>
-        <div className="supplier-submit"><button className="btn primary" disabled={busy}>提交本家报价</button></div>
-      </form></section> : !last && !offer && <p>本轮报价已截止。</p>}
+        <FeeEditor fees={fees} amounts={values} onChange={setValues} disabled={busy} currency={p.currency}
+          onFinishFees={()=>quoteConditions.current?.focus()}/>
+        <label className="field">附加条件（选填）<textarea ref={quoteConditions} value={conditions} disabled={busy} onChange={e=>setConditions(e.target.value)}/></label>
+        <div className="supplier-submit">
+          {quoteError&&<p className="notice warn" role="alert">{quoteError}</p>}
+          <button className="btn primary" disabled={busy}>{busy?'正在提交…':'提交本家报价'}</button>
+        </div>
+      </form></section> : !canQuote && !offer && !p.quoteWithdrawal && !p.responsesFrozen && <p>本轮报价已截止。</p>}
     {last && <section className="panel"><h2>本家最新报价</h2><p>{p.currency} {total(last.amounts)} · 第 {p.quotes.length} 版 · {date(last.at)}</p>
       {canQuote && !editing && <button className="btn" onClick={()=>setEditing(true)}>修订报价</button>}
       {!p.responsesFrozen && !p.quoteWithdrawal && <details><summary>撤回本轮报价</summary><label className="field">撤回原因<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>
